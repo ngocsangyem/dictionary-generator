@@ -508,52 +508,58 @@ MIT
 
 ## Testing
 
-The application includes a comprehensive test suite built with Jest. The tests cover utility functions, core processing logic, and configuration modules.
+The project includes a comprehensive test suite built with Jest to ensure the reliability and correctness of the core functionality.
 
 ### Running Tests
 
-To run the tests, use the following commands:
-
 ```bash
-# Set up test directories (if they don't exist)
-npm run setup:test
-
 # Run all tests
 npm test
 
-# Run tests in watch mode during development
+# Run tests with watch mode (for development)
 npm run test:watch
 
-# Generate test coverage report
+# Run tests with coverage report
 npm run test:coverage
 ```
 
-The test suite includes unit tests for:
-- File utilities (`fileUtils.js`)
-- Merge utilities (`mergeUtils.js`)
-- Parallel processor (`parallelProcessor.js`)
-- Manual merge functionality (`manualMerge.js`)
-- Progress tracker (`ProgressTracker.js`)
-- Prompt configuration (`promptConfig.js`)
-
 ### Test Structure
 
-Tests are organized in a directory structure that mirrors the source code:
+The tests are organized in the following directory structure:
 
 ```
 tests/
-  └── unit/
-      ├── utils/
-      │   ├── fileUtils.test.js
-      │   ├── mergeUtils.test.js
-      │   └── ProgressTracker.test.js
-      ├── core/
-      │   ├── parallelProcessor.test.js
-      │   └── manualMerge.test.js
-      └── config/
-          └── promptConfig.test.js
+└── unit/
+    ├── config/           # Tests for configuration modules
+    ├── core/             # Tests for core processing modules
+    └── utils/            # Tests for utility functions
 ```
 
-### Mocking
+### What's Being Tested
 
-The tests use mock-fs to simulate the file system without making actual file system changes during test execution. 
+The test suite covers several key components:
+
+1. **Core Processing**
+   - Parallel processing functionality
+   - Chunk management
+   - Manual merge operations
+   - Batch processing
+
+2. **Utilities**
+   - File operations
+   - Progress tracking
+   - Merge operations
+   - JSON handling
+
+3. **Configuration**
+   - Prompt template loading and validation
+
+### Continuous Integration
+
+The project uses GitHub Actions for continuous integration, with workflows for:
+
+1. **Node.js Tests**: Runs tests on multiple Node.js versions
+2. **Code Quality**: Ensures code meets the style guidelines using ESLint
+3. **Coverage Badge**: Updates the coverage badge based on test results
+
+To set up your own CI, update the GitHub workflow files in the `.github/workflows/` directory with your repository details. 
