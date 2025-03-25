@@ -156,27 +156,76 @@ function getTotalWordCount() {
 }
 
 /**
- * Clean up progress files for a chunk
+ * Clean up progress files for a given chunk
+ * @param {number} chunkId - ID of the chunk to clean
+ * @returns {boolean} - Success status
  */
-function cleanupProgressFiles(chunkDir, chunkId) {
+function cleanupProgressFiles(chunkId) {
     try {
-        // Delete progress files in chunk directory
-        const files = fs.readdirSync(chunkDir);
-        files.forEach(file => {
-            if (file.startsWith('progress_')) {
-                fs.unlinkSync(path.join(chunkDir, file));
-                console.log(`Deleted progress file: ${file}`);
-            }
-        });
-
-        // Delete progress tracker file
-        const progressFile = path.join(DIRECTORIES.PROGRESS, `chunk_${chunkId}_progress.json`);
-        if (fs.existsSync(progressFile)) {
-            fs.unlinkSync(progressFile);
-            console.log(`Deleted progress tracker file: chunk_${chunkId}_progress.json`);
+        const chunkDir = path.join(DIRECTORIES.CHUNKS, `chunk_${chunkId}`);
+        
+        if (!fs.existsSync(chunkDir)) {
+            console.log(`Chunk directory not found: ${chunkDir}`);
+            return false;
         }
+        
+        const progressFiles = fs.readdirSync(chunkDir)
+            .filter(file => file.endsWith('.json') && file.startsWith('progress_'));
+        
+        if (progressFiles.length === 0) {
+            console.log(`No progress files found for chunk ${chunkId}`);
+            return true;
+        }
+        
+        console.log(`Cleaning up ${progressFiles.length} progress files for chunk ${chunkId}`);
+        let successCount = 0;
+        
+        for (const file of progressFiles) {
+            try {
+                fs.unlinkSync(path.join(chunkDir, file));
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to delete ${file}:`, error.message);
+            }
+        }
+        
+        console.log(`Successfully deleted ${successCount}/${progressFiles.length} progress files`);
+        return successCount === progressFiles.length;
     } catch (error) {
-        console.warn(`Warning: Error cleaning up progress files for chunk ${chunkId}:`, error.message);
+        console.error('Error cleaning up progress files:', error.message);
+        return false;
+    }
+}
+
+/**
+ * Clean up progress files for all chunks
+ * @returns {boolean} - Success status
+ */
+function cleanupAllProgressFiles() {
+    try {
+        const chunkDirs = fs.readdirSync(DIRECTORIES.CHUNKS)
+            .filter(dir => dir.startsWith('chunk_'));
+        
+        if (chunkDirs.length === 0) {
+            console.log('No chunk directories found');
+            return true;
+        }
+        
+        let allSuccess = true;
+        
+        for (const chunkDirName of chunkDirs) {
+            const chunkId = parseInt(chunkDirName.replace('chunk_', ''));
+            const success = cleanupProgressFiles(chunkId);
+            
+            if (!success) {
+                allSuccess = false;
+            }
+        }
+        
+        return allSuccess;
+    } catch (error) {
+        console.error('Error cleaning up all progress files:', error.message);
+        return false;
     }
 }
 
@@ -207,5 +256,6 @@ module.exports = {
     findLatestProcessedIndex,
     getTotalWordCount,
     cleanupProgressFiles,
+    cleanupAllProgressFiles,
     removeAudioField
 }; 

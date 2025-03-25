@@ -1,23 +1,24 @@
 {
   "name": "dictionary-generator",
   "version": "1.0.0",
-  "description": "A parallel processing tool for generating dictionary entries using Google's Gemini AI API",
+  "description": "Parallel dictionary generator using Gemini API",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "continue": "node index.js continue",
     "reset": "node index.js reset",
-    "merge": "node index.js merge",
     "count": "node index.js count",
-    "test": "node index.js test"
+    "test": "node index.js test",
+    "merge": "node index.js merge",
+    "mergeall": "node index.js mergeall",
+    "complete": "node index.js complete",
+    "cleanup": "node index.js cleanup"
   },
   "keywords": [
     "dictionary",
-    "AI",
-    "parallel",
-    "processing",
+    "generative-ai",
     "gemini",
-    "word-processing"
+    "parallel"
   ],
   "author": "",
   "license": "MIT",

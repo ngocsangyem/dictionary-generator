@@ -73,6 +73,15 @@ npm run count
 
 # Run a test batch (requires additional parameters)
 npm run test -- 0 10
+
+# Merge all chunks and recover progress
+npm run mergeall
+
+# Ensure all chunks have final.json files
+npm run complete
+
+# Clean up progress files for all chunks
+npm run cleanup
 ```
 
 For commands that require additional parameters, use the `--` separator as shown in the test example above.
@@ -125,11 +134,46 @@ node index.js merge <chunkId>
 - Merges all JSON files in the specified chunk directory
 - Removes duplicate entries, keeping the latest version
 - Updates progress tracking with actual word count
-- Saves the merged result as `progress_<latest_index>.json`
+- Saves the merged result as `final.json`
 - Automatically cleans up:
   - Individual JSON files after successful merge
   - Progress files in the chunk directory
   - Progress tracker file in `./chunks/progress/`
+
+### Merge All Chunks
+
+```bash
+node index.js mergeall
+```
+
+- Merges all chunks in the output directory
+- Useful for recovery after interruptions or failures
+- Creates `final.json` for each chunk by merging progress files
+- Finally merges all `final.json` files into one result file
+- Handles cases where workers didn't complete successfully
+
+### Complete Chunks
+
+```bash
+node index.js complete
+```
+
+- Ensures all chunks have `final.json` files
+- Processes any chunks that have progress files but no final file
+- Useful for recovering from interruptions or crashes
+- Does not overwrite existing `final.json` files
+
+### Clean Up Progress Files
+
+```bash
+node index.js cleanup [chunkId]
+```
+
+- Cleans up progress files after successful merging
+- Can target a specific chunk or all chunks
+- If `chunkId` is provided, cleans up that specific chunk
+- If no `chunkId` is provided, cleans up all chunks
+- Useful for freeing up disk space after merging
 
 ### Count Words
 
@@ -186,7 +230,33 @@ The tool maintains detailed progress information:
 4. **Recovery from Failures**
    - Each chunk saves progress independently
    - Failed chunks can be reprocessed separately
+   - Use `node index.js complete` to ensure all chunks have final files
+   - Use `node index.js mergeall` to recover and merge all chunks
    - Use merge command to consolidate partial results
+
+## Improved Error Handling
+
+The tool includes robust error handling mechanisms:
+
+1. **Worker Process Recovery**
+   - Individual worker failures don't affect other workers
+   - Progress is saved continuously during processing
+   - Interrupted processes can be recovered
+
+2. **SIGINT Handling**
+   - Graceful shutdown on Ctrl+C interruptions
+   - Attempts to save progress before exiting
+   - Ensures chunks are finalized when possible
+
+3. **Recovery Commands**
+   - `complete`: Creates final.json files from progress files
+   - `mergeall`: Merges all progress across all chunks
+   - `cleanup`: Removes temporary files after successful merging
+
+4. **Progress Preservation**
+   - All progress is continuously saved during processing
+   - Merging preserves progress information
+   - Recovery tools ensure no work is lost due to interruptions
 
 ## File Structure
 

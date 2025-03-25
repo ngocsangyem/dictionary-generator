@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { parentPort } = require('worker_threads');
+const { parentPort, workerData } = require('worker_threads');
 const { DIRECTORIES, DELAY_CONFIG, BATCH_SIZE } = require('../config/constants');
 const { loadPromptConfig } = require('../config/promptConfig');
 const { saveChunkProgress, loadChunkProgress, cleanupProgressFiles, removeAudioField } = require('../utils/fileUtils');
@@ -97,11 +97,13 @@ Current Speed: ${progress.currentSpeed} words/sec\n`);
 
                     // Merge and save progress periodically (e.g., every 5 batches)
                     if (i % (BATCH_SIZE * 5) === 0) {
+                        console.log(`Worker ${chunkId}: Merging progress files at batch index ${i}`);
                         mergedResults = mergeChunkJsonFiles(chunkDir, chunkId) || mergedResults;
                     } else {
                         // Save progress file for this batch
                         const progressFile = path.join(chunkDir, `progress_${i}.json`);
-                        fs.writeFileSync(progressFile, JSON.stringify(mergedResults, null, 2));
+                        fs.writeFileSync(progressFile, JSON.stringify(processedBatchResult, null, 2));
+                        console.log(`Worker ${chunkId}: Saved progress to ${progressFile}`);
                     }
 
                     success = true;
@@ -144,18 +146,34 @@ Current Speed: ${progress.currentSpeed} words/sec\n`);
         // After processing all batches, merge all JSON files before saving final result
         console.log(`Worker ${chunkId}: Merging all JSON files...`);
         const finalMergedResults = mergeChunkJsonFiles(chunkDir, chunkId) || mergedResults;
+        
+        if (!finalMergedResults || Object.keys(finalMergedResults).length === 0) {
+            throw new Error(`Failed to merge results for chunk ${chunkId}`);
+        }
 
         // Save final result
         const finalChunkFile = path.join(chunkDir, 'final.json');
         fs.writeFileSync(finalChunkFile, JSON.stringify(finalMergedResults, null, 2));
+        console.log(`Worker ${chunkId}: Saved final result to ${finalChunkFile}`);
         
         // Clean up progress files after successful completion
-        cleanupProgressFiles(chunkDir, chunkId);
+        cleanupProgressFiles(chunkId);
         
+        // Send success message to parent
         parentPort.postMessage({ success: true, chunkId });
+        console.log(`Worker ${chunkId}: Processing complete`);
     } catch (error) {
         parentPort.postMessage({ error: error.message });
     }
 }
 
 module.exports = processChunk; 
+
+// Execute the processChunk function when loaded as a worker
+if (parentPort && workerData) {
+    console.log(`Worker started with data for chunk ${workerData.chunkId}, processing ${workerData.words.length} words`);
+    processChunk(workerData).catch(error => {
+        console.error(`Unhandled error in worker: ${error.message}`);
+        parentPort.postMessage({ error: error.message });
+    });
+} 
