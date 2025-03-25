@@ -1,0 +1,15 @@
+# Dictionary Generation Word List
+# Add one word per line below this comment
+# Lines starting with # will be ignored
+
+apple
+banana
+computer
+language
+dictionary
+generator
+parallel
+processing
+algorithm
+efficiency
+performance 

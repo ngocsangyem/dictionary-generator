@@ -1,0 +1,30 @@
+{
+  "task": "dictionary_generation",
+  "version": "1.0",
+  "schema": {
+    "Meaning": {
+      "speech_part": "string",
+      "defs": {
+        "tran": "string",
+        "examples": "string[]",
+        "synonyms": "string[]",
+        "antonyms": "string[]"
+      }
+    },
+    "Word": {
+      "word": "string",
+      "meanings": "Meaning[]",
+      "phonetics": {
+        "type": "string",
+        "ipa": "string"
+      }
+    }
+  },
+  "instructions": {
+    "examples": "More than two examples per definition",
+    "highlighting": "Use **word** format in examples",
+    "empty_arrays": "Leave empty arrays for missing synonyms/antonyms"
+  },
+  "prompt_template": "Create a comprehensive dictionary in JSON format, detailing the words provided. For each word, include its full part of speech (e.g., adjective, verb, noun, word form), IPA pronunciation (both US and UK), and a set of meanings. Each meaning should have a Vietnamese translation and example sentences. The JSON structure should adhere to the following schema:\ninterface Meaning {\n    speech_part: string;\n    defs: {\n        tran: string;\n        examples: string[]; // More than two examples\n       synonyms: string[];\n       antonyms: string[]\n    }[];\n}\n\ninterface Word {\n    [key: string]: {\n        word: string;\n        meanings: Meaning[];\n        phonetics: {\n           type: string;\n           ipa: string;\n      }[];\n    };\n}\n\nNote: If can not find any antonyms or synonyms, just leave it empty array. In each example sentence, you should use the word in context (definition and speech part), and highlight the word in **word** to render it in markdown. Ex: **go** is a noun.\n\nIMPORTANT: Please ensure your response is a complete, valid JSON object. Do not truncate or cut off the response. The response should start with { and end with }. Include all words in the list with their complete data.\n\nThe words to be defined are: {words}.",
+  "retry_prompt_template": "I notice the previous response was incomplete. Please provide a complete JSON response for the following words. Make sure to:\n1. Start with { and end with }\n2. Include all words in the list\n3. Provide complete data for each word\n4. Do not truncate the response\n\nThe words to be defined are: {words}."
+}

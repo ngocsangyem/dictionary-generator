@@ -1,0 +1,373 @@
+# Dictionary Generation Tool
+
+A parallel processing tool for generating dictionary entries using Google's Gemini AI API.
+
+## Features
+
+- Parallel processing using Node.js worker threads
+- Automatic progress tracking and resumption
+- Rate limit handling with configurable delays
+- Detailed logging of API responses
+- Progress monitoring with time estimates
+- Batch processing with automatic retries
+- JSON validation and error handling
+
+## Prerequisites
+
+1. Node.js installed
+2. Google Gemini AI API key
+3. Required npm packages
+4. Word list file (words_list_full.txt)
+
+## Installation
+
+1. Install required packages:
+```bash
+npm install
+```
+
+2. Create and set up your environment file:
+```bash
+touch .env
+echo "GEMINI_API_KEY=your_api_key_here" >> .env
+echo ".env" >> .gitignore
+```
+
+3. Add your words list file to the data directory:
+```bash
+# Create a file with your words
+touch data/words_list_full.txt
+```
+Add your words to the file, one word per line. Example:
+```
+# Dictionary Generation Word List
+# Lines starting with # are comments and will be ignored
+
+apple
+banana
+computer
+```
+
+A template file `data/words_list_template.txt` is provided for reference.
+
+Note: Start with a small test list before processing a large vocabulary.
+
+## Usage
+
+The script supports several modes of operation which can be run using Node.js directly or npm scripts.
+
+### Using npm scripts
+
+```bash
+# Start from beginning (index 0)
+npm start
+
+# Continue from last processed position
+npm run continue
+
+# Start fresh with default configuration 
+npm run reset
+
+# Count total words processed
+npm run count
+
+# Run a test batch (requires additional parameters)
+npm run test -- 0 10
+```
+
+For commands that require additional parameters, use the `--` separator as shown in the test example above.
+
+### Using Node.js directly
+
+### Default Mode (Start from Beginning)
+
+```bash
+node index.js
+```
+
+- Starts processing from the beginning (index 0)
+- Creates new directories if they don't exist
+- Uses existing configuration if available
+- Distributes work among available CPU cores
+- Saves progress for each chunk separately
+
+### Continue Processing
+
+```bash
+node index.js continue [startIndex]
+```
+
+- Resumes processing from the last saved position
+- If no `startIndex` is provided:
+  1. Checks all progress files in `./chunks/progress/`
+  2. Finds the highest processed index
+  3. Resumes processing from that point
+- If `startIndex` is provided, continues from that specific index
+- Preserves existing progress and results
+
+### Reset Processing
+
+```bash
+node index.js reset [startIndex]
+```
+
+- Starts a fresh processing run with default configuration
+- If `startIndex` is provided, starts from that index
+- If no `startIndex` is provided, starts from 0
+- Does not attempt to load or use existing progress
+
+### Merge Files
+
+```bash
+node index.js merge <chunkId>
+```
+
+- Merges all JSON files in the specified chunk directory
+- Removes duplicate entries, keeping the latest version
+- Updates progress tracking with actual word count
+- Saves the merged result as `progress_<latest_index>.json`
+- Automatically cleans up:
+  - Individual JSON files after successful merge
+  - Progress files in the chunk directory
+  - Progress tracker file in `./chunks/progress/`
+
+### Count Words
+
+```bash
+node index.js count
+```
+
+- Shows the total number of words processed across all chunks
+- Calculates the sum by:
+  - Reading all progress files in `./chunks/progress/`
+  - Adding up the `totalProcessed` count from each chunk
+  - Verifying actual word counts from merged data
+
+### Test Processing
+
+```bash
+node index.js test <startIndex> [batchSize]
+```
+
+- Tests processing on a single batch of words
+- `startIndex`: Required, specifies where to start
+- `batchSize`: Optional, defaults to 28 words
+- Saves results in `./test_results/`
+
+## Progress Tracking
+
+The tool maintains detailed progress information:
+
+- Each chunk has its own progress file in `./chunks/progress/`
+- Progress files contain:
+  - Last processed index
+  - Total words processed
+  - Processing speed
+  - Time estimates
+  - Actual word count
+
+## Managing Long-Running Processes
+
+1. **Monitoring Progress**
+   - Check progress files in `./chunks/progress/`
+   - Use `node index.js count` to see total processed words
+   - Monitor log files in `./logs/` directory
+
+2. **Stopping and Resuming**
+   - Safely stop with Ctrl+C
+   - Resume using `node index.js continue`
+   - Progress is automatically saved per chunk
+
+3. **Merging Results**
+   - Periodically merge chunk results using `node index.js merge <chunkId>`
+   - Final results are saved in `./merged/result_final.json`
+   - Progress is preserved and updated after merging
+
+4. **Recovery from Failures**
+   - Each chunk saves progress independently
+   - Failed chunks can be reprocessed separately
+   - Use merge command to consolidate partial results
+
+## File Structure
+
+The project follows a clean, organized directory structure:
+
+```
+.
+├── config/             # Configuration files
+│   └── prompt_config.json
+├── data/               # Input data
+│   └── words_list_full.txt
+├── logs/               # API response and error logs
+├── output/             # All output files
+│   ├── chunks/         # Individual chunk processing directories
+│   │   └── chunk_N/    # One directory per worker
+│   ├── progress/       # Progress tracking files
+│   └── merged/         # Final merged results
+│       └── result_final.json
+├── tests/              # Test-related files
+│   └── results/        # Test output results
+├── .env                # Environment configuration
+├── index.js            # Main application
+└── README.md           # Documentation
+```
+
+This structure separates:
+- Input data (`data/`)
+- Configuration files (`config/`)
+- Processing outputs (`output/`)
+- Logs and debugging information (`logs/`)
+- Test results (`tests/results/`)
+
+Each worker processes a portion of the word list in its own chunk directory, with progress tracked in the progress directory. Final results are stored in the merged directory.
+
+## Configuration
+
+### Delay Settings
+
+The application uses configurable delays to handle rate limits and errors:
+
+```javascript
+const DELAY_CONFIG = {
+    INITIAL_DELAY: 15000,        // 15 seconds between normal requests
+    RETRY_DELAY: 45000,         // 45 seconds after an error
+    RATE_LIMIT_DELAY: 120000,   // 2 minutes if we hit rate limit
+    EMPTY_RESULT_DELAY: 30000,  // 30 seconds if we get empty result
+    MAX_RETRIES: 7              // Maximum retry attempts
+};
+```
+
+### Batch Processing
+
+- Default batch size: 28 words
+- Number of workers: Automatically set to CPU core count
+
+## Output Format
+
+The dictionary entries follow this JSON structure:
+
+```javascript
+{
+    "word": {
+        "word": string,
+        "meanings": [{
+            "speech_part": string,
+            "defs": {
+                "tran": string,
+                "examples": string[],
+                "synonyms": string[],
+                "antonyms": string[]
+            }
+        }],
+        "phonetics": [{
+            "type": string,
+            "ipa": string
+        }]
+    }
+}
+```
+
+## Error Handling
+
+The application handles several types of errors:
+- Rate limiting
+- Empty responses
+- Invalid JSON
+- Missing word data
+- API errors
+
+Each error type has specific retry logic and delay times.
+
+## Resuming Progress
+
+If processing is interrupted, you can resume by:
+
+1. Check progress of chunks:
+```bash
+ls -l ./chunks/progress/
+```
+
+2. View specific chunk progress:
+```bash
+cat ./chunks/progress/chunk_0_progress.json
+```
+
+3. Resume processing:
+```bash
+node index.js continue
+```
+
+The application will automatically:
+- Load progress for each chunk
+- Resume from the last processed position
+- Preserve completed results
+
+## Monitoring
+
+Progress information includes:
+- Words processed/total
+- Elapsed time
+- Estimated remaining time
+- Current processing speed
+- Progress percentage
+
+## Limitations
+
+- Free tier API rate limits
+- Maximum batch size of 28 words
+- Processing time varies based on API response times
+
+## Tips
+
+1. For long runs:
+   - Monitor progress files regularly
+   - Keep track of log files for debugging
+   - Consider using smaller batch sizes if encountering frequent errors
+   - Use Ctrl+C to safely stop processing - the script will save progress before exiting
+   - Resume anytime with `node index.js continue` - it will pick up from the last saved state
+
+2. For testing:
+   - Use test mode with small batches first
+   - Check API responses in logs
+   - Verify output format in test results
+
+3. For rate limits:
+   - Adjust delay settings in `DELAY_CONFIG`
+   - Monitor API response errors
+   - Consider increasing delays if hitting limits frequently
+
+## Managing Long-Running Processes
+
+### Default Behavior
+When running `node index.js continue`:
+1. The script reads the total word list from `words_list_full.txt`
+2. Scans all progress files to find the latest processed index
+3. Starts processing from that index, ensuring no words are skipped
+4. Divides work among available CPU cores (one chunk per core)
+5. Each worker maintains its own progress and can be resumed independently
+
+### Stopping and Resuming
+1. **Safe Stopping**:
+   - Use Ctrl+C to stop the process
+   - The script saves progress before exiting
+   - Each worker saves its state independently
+   - Progress files track the exact position of each chunk
+
+2. **Automatic Resumption**:
+   - Running `node index.js continue` will:
+     - Scan all progress files to find the latest processed index
+     - Start from that position to ensure no words are skipped
+     - Distribute work among available workers
+     - Preserve all previously processed results
+
+3. **Progress Monitoring**:
+   - Each worker logs its progress independently
+   - Progress files show exact position in each chunk
+   - Logs contain detailed processing information
+   - Real-time progress updates in console
+
+### Recovery from Failures
+- If a worker fails, it saves partial results
+- Other workers continue processing their chunks
+- Resume the failed chunk by running with its last saved index
+- Merged results combine successful outputs from all chunks 
