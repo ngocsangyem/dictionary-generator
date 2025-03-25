@@ -489,3 +489,15 @@ When running `node index.js continue`:
 - Use `node index.js complete` to create final.json files from progress
 - Use `node index.js mergeall preserve` to recover and merge while preserving progress
 - Final merged dictionary is available at `./output/merged/result_final.json` 
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes, including:
+- New features
+- Bug fixes
+- Improvements
+- Breaking changes
+
+## License
+
+MIT 

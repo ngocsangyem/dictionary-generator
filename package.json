@@ -1,6 +1,6 @@
 {
   "name": "dictionary-generator",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Parallel dictionary generator using Gemini API",
   "main": "index.js",
   "scripts": {
@@ -11,6 +11,7 @@
     "test": "node index.js test",
     "merge": "node index.js merge",
     "mergeall": "node index.js mergeall",
+    "mergeall:preserve": "node index.js mergeall preserve",
     "complete": "node index.js complete",
     "cleanup": "node index.js cleanup"
   },
