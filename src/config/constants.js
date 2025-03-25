@@ -91,39 +91,39 @@ const dataExample = `
     ]
   }
 }
-\`\`\``
+\`\`\``;
 
 // Default prompt configuration
 const defaultPromptConfig = {
-  task: "dictionary_generation",
-  version: "1.3.3",
+  task: 'dictionary_generation',
+  version: '1.3.3',
   schema: {
     Meaning: {
-      speech_part: "string",
+      speech_part: 'string',
       defs: {
-        tran: "string",
-        en_def: "string",
-        examples: "string[]",
-        synonyms: "string[]",
-        antonyms: "string[]"
+        tran: 'string',
+        en_def: 'string',
+        examples: 'string[]',
+        synonyms: 'string[]',
+        antonyms: 'string[]'
       }
     },
     Word: {
-      word: "string",
-      meanings: "Meaning[]",
+      word: 'string',
+      meanings: 'Meaning[]',
       phonetics: {
-        type: "string",
-        ipa: "string"
+        type: 'string',
+        ipa: 'string'
       }
     }
   },
   instructions: {
-    examples: "At least three examples per definition",
-    highlighting: "Highlight the target word in examples using **word**, including inflected forms",
-    empty_arrays: "Leave empty arrays for missing synonyms/antonyms",
-    phonetics: "Include both US and UK pronunciations when available",
-    en_def: "Make sure to include a clear and comprehensive English definition for each meaning",
-    tran: "Make sure include a Vietnamese translation for each meaning"
+    examples: 'At least three examples per definition',
+    highlighting: 'Highlight the target word in examples using **word**, including inflected forms',
+    empty_arrays: 'Leave empty arrays for missing synonyms/antonyms',
+    phonetics: 'Include both US and UK pronunciations when available',
+    en_def: 'Make sure to include a clear and comprehensive English definition for each meaning',
+    tran: 'Make sure include a Vietnamese translation for each meaning'
   },
   // eslint-disable-next-line camelcase
   prompt_template: `Act as an English teacher preparing materials for IELTS students. Create a comprehensive dictionary in JSON format for the given list of words. For each word, include:
