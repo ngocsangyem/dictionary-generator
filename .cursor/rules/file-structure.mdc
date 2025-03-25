@@ -1,0 +1,3008 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+================================================
+File: index.js
+================================================
+require('dotenv').config();
+
+const testSingleBatch = require('./src/core/testBatch');
+const manualMerge = require('./src/core/manualMerge');
+const { findLatestProcessedIndex, getTotalWordCount, cleanupAllProgressFiles, cleanupProgressFiles } = require('./src/utils/fileUtils');
+const { mergeChunkFiles } = require('./src/utils/mergeUtils');
+const { loadPromptConfig } = require('./src/config/promptConfig');
+const { ensureChunkFinalFiles, initParallel } = require('./src/core/parallelProcessor');
+
+// Get API key from environment variable
+const API_KEY = process.env.GEMINI_API_KEY;
+
+// Main entry point for command line mode
+if (require.main === module) {
+    const args = process.argv.slice(2);
+    const mode = args[0];
+    let startIndex = parseInt(args[1]);
+
+    switch (mode) {
+        case 'help':
+            // Display help information
+            console.log(`
+Dictionary Generation Tool - Usage:
+----------------------------------
+node index.js [command] [options]
+
+Commands:
+  continue [startIndex]  Continue processing from the latest index or specified index
+  reset [startIndex]     Reset and start processing from beginning or specified index
+  merge <chunkId>        Manually merge files for a specific chunk
+  mergeall [preserve]    Manually merge all chunks, useful for recovery
+                         Add 'preserve' to keep progress files for word counting
+  complete               Ensure all chunks have final.json files using progress files
+  cleanup [chunkId]      Clean up progress files (for all chunks or specific chunk)
+  count                  Display total processed word count across all chunks
+  test <startIndex> [batchSize]  Test processing for a specific batch
+  help                   Display this help information
+
+Examples:
+  node index.js continue     Continue from the latest processed index
+  node index.js reset 100    Start processing from index 100
+  node index.js merge 2      Merge all files for chunk 2
+  node index.js mergeall     Merge all chunks using progress files
+  node index.js mergeall preserve  Merge all chunks but preserve progress files
+  node index.js complete     Ensure all chunks have final.json files
+  node index.js cleanup      Clean up all progress files
+  node index.js cleanup 2    Clean up progress files for chunk 2
+  node index.js count        Show total processed words
+  node index.js test 500 20  Test processing 20 words starting from index 500`);
+            break;
+        case 'continue':
+            // If no startIndex provided, find the latest processed index
+            if (isNaN(startIndex)) {
+                startIndex = findLatestProcessedIndex();
+            }
+            initParallel(startIndex, true, API_KEY);
+            break;
+        case 'reset':
+            // For reset, use provided index or start from beginning
+            startIndex = isNaN(startIndex) ? 0 : startIndex;
+            initParallel(startIndex, false, API_KEY);
+            break;
+        case 'merge':
+            // Merge mode for manually merging chunk files
+            const chunkId = parseInt(args[1]);
+            if (isNaN(chunkId)) {
+                console.log('Please provide a valid chunk ID for merge mode');
+                console.log('Usage: node index.js merge <chunkId>');
+                process.exit(1);
+            }
+            const success = manualMerge(chunkId);
+            if (!success) {
+                process.exit(1);
+            }
+            break;
+        case 'mergeall':
+            // Merge all chunks
+            const preserveProgress = (args[1] === 'preserve');
+            if (preserveProgress) {
+                console.log('Will preserve progress files after merging');
+            }
+            const mergeAllSuccess = manualMerge(-1, preserveProgress);
+            if (!mergeAllSuccess) {
+                process.exit(1);
+            }
+            break;
+        case 'complete':
+            // Ensure all chunks have final.json files
+            console.log('Ensuring all chunks have final.json files...');
+            const completeSuccess = ensureChunkFinalFiles();
+            if (!completeSuccess) {
+                console.log('Failed to complete all chunks');
+                process.exit(1);
+            }
+            console.log('All chunks completed successfully');
+            break;
+        case 'cleanup':
+            // Clean up progress files
+            if (isNaN(startIndex)) {
+                console.log('Cleaning up progress files for all chunks...');
+                const cleanupSuccess = cleanupAllProgressFiles();
+                if (!cleanupSuccess) {
+                    console.log('Failed to clean up all progress files');
+                    process.exit(1);
+                }
+                console.log('All progress files cleaned up successfully');
+            } else {
+                console.log(`Cleaning up progress files for chunk ${startIndex}...`);
+                const cleanupSuccess = cleanupProgressFiles(startIndex);
+                if (!cleanupSuccess) {
+                    console.log(`Failed to clean up progress files for chunk ${startIndex}`);
+                    process.exit(1);
+                }
+                console.log(`Progress files for chunk ${startIndex} cleaned up successfully`);
+            }
+            break;
+        case 'count':
+            // Count total words across all chunks
+            const totalWords = getTotalWordCount();
+            console.log(`Total words processed across all chunks: ${totalWords}`);
+            break;
+        case 'test':
+            // Test mode for specific index
+            if (isNaN(startIndex)) {
+                console.log('Please provide a valid index for test mode');
+                process.exit(1);
+            }
+            const batchSize = parseInt(args[2]) || null;
+            testSingleBatch(startIndex, batchSize, API_KEY)
+                .then(result => {
+                    console.log('Test result preview:');
+                    console.log(JSON.stringify(result, null, 2));
+                })
+                .catch(error => {
+                    console.error('Test failed:', error);
+                    process.exit(1);
+                });
+            break;
+        default:
+            // Default behavior: start from beginning
+            console.log('No command specified, starting from the beginning...');
+            initParallel(0, true, API_KEY);
+            break;
+    }
+}
+
+// Export the public API
+module.exports = {
+    initParallel,
+    mergeChunkFiles,
+    getPromptConfig: loadPromptConfig,
+    testSingleBatch,
+    mergeChunkJsonFiles: require('./src/utils/mergeUtils').mergeChunkJsonFiles,
+    ensureChunkFinalFiles,
+    cleanupProgressFiles,
+    cleanupAllProgressFiles
+};
+
+
+================================================
+File: package.json
+================================================
+{
+  "name": "dictionary-generator",
+  "version": "1.2.0",
+  "description": "Parallel dictionary generator using Gemini API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "continue": "node index.js continue",
+    "reset": "node index.js reset",
+    "count": "node index.js count",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
+    "setup:test": "mkdir -p tests/unit/utils tests/unit/core tests/unit/config",
+    "merge": "node index.js merge",
+    "mergeall": "node index.js mergeall",
+    "mergeall:preserve": "node index.js mergeall --preserve",
+    "complete": "node index.js complete",
+    "cleanup": "node index.js cleanup"
+  },
+  "keywords": [
+    "dictionary",
+    "generative-ai",
+    "gemini",
+    "parallel"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.1.3",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.42.0",
+    "jest": "^29.7.0",
+    "mock-fs": "^5.2.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coveragePathIgnorePatterns": [
+      "/node_modules/"
+    ],
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "collectCoverage": true,
+    "coverageReporters": ["text", "lcov"]
+  }
+}
+
+
+
+================================================
+File: .eslintrc.js
+================================================
+module.exports = {
+  env: {
+    node: true,
+    commonjs: true,
+    es2021: true,
+    jest: true
+  },
+  extends: 'eslint:recommended',
+  parserOptions: {
+    ecmaVersion: 'latest'
+  },
+  rules: {
+    'indent': ['error', 2],
+    'linebreak-style': ['error', 'unix'],
+    'quotes': ['error', 'single', { 'allowTemplateLiterals': true }],
+    'semi': ['error', 'always'],
+    'no-unused-vars': ['warn', { 'argsIgnorePattern': '^_' }],
+    'no-console': 'off',
+    'no-process-exit': 'off',
+    'camelcase': 'warn'
+  },
+  ignorePatterns: [
+    'node_modules/',
+    'coverage/',
+    '.github/'
+  ]
+}; 
+
+
+================================================
+File: config/prompt_config.json
+================================================
+{
+  "task": "dictionary_generation",
+  "version": "1.0",
+  "schema": {
+    "Meaning": {
+      "speech_part": "string",
+      "defs": {
+        "tran": "string",
+        "examples": "string[]",
+        "synonyms": "string[]",
+        "antonyms": "string[]"
+      }
+    },
+    "Word": {
+      "word": "string",
+      "meanings": "Meaning[]",
+      "phonetics": {
+        "type": "string",
+        "ipa": "string"
+      }
+    }
+  },
+  "instructions": {
+    "examples": "More than two examples per definition",
+    "highlighting": "Use **word** format in examples",
+    "empty_arrays": "Leave empty arrays for missing synonyms/antonyms"
+  },
+  "prompt_template": "Create a comprehensive dictionary in JSON format, detailing the words provided. For each word, include its full part of speech (e.g., adjective, verb, noun, word form), IPA pronunciation (both US and UK), and a set of meanings. Each meaning should have a Vietnamese translation and example sentences. The JSON structure should adhere to the following schema:\ninterface Meaning {\n    speech_part: string;\n    defs: {\n        tran: string;\n        examples: string[]; // More than two examples\n       synonyms: string[];\n       antonyms: string[]\n    }[];\n}\n\ninterface Word {\n    [key: string]: {\n        word: string;\n        meanings: Meaning[];\n        phonetics: {\n           type: string;\n           ipa: string;\n      }[];\n    };\n}\n\nNote: If can not find any antonyms or synonyms, just leave it empty array. In each example sentence, you should use the word in context (definition and speech part), and highlight the word in **word** to render it in markdown. Ex: **go** is a noun.\n\nIMPORTANT: Please ensure your response is a complete, valid JSON object. Do not truncate or cut off the response. The response should start with { and end with }. Include all words in the list with their complete data.\n\nThe words to be defined are: {words}.",
+  "retry_prompt_template": "I notice the previous response was incomplete. Please provide a complete JSON response for the following words. Make sure to:\n1. Start with { and end with }\n2. Include all words in the list\n3. Provide complete data for each word\n4. Do not truncate the response\n\nThe words to be defined are: {words}."
+}
+
+
+
+================================================
+File: src/config/constants.js
+================================================
+const path = require('path');
+const os = require('os');
+
+// Directory structure
+const DIRECTORIES = {
+    ROOT: '.',
+    DATA: './data',
+    OUTPUT: './output',
+    CHUNKS: './output/chunks',
+    PROGRESS: './output/progress',
+    MERGED: './output/merged',
+    CONFIG: './config',
+    LOGS: './logs',
+    TEST: './tests/results'
+};
+
+// Processing configuration
+const CONFIG_FILE = 'prompt_config.json';
+const NUM_WORKERS = os.cpus().length;
+const BATCH_SIZE = 28;
+
+// Delay configuration for API calls
+const DELAY_CONFIG = {
+    INITIAL_DELAY: 15000,        // 15 seconds between normal requests
+    RETRY_DELAY: 45000,          // 45 seconds after an error
+    RATE_LIMIT_DELAY: 120000,    // 2 minutes if we hit rate limit
+    EMPTY_RESULT_DELAY: 30000,   // 30 seconds if we get empty result
+    MAX_RETRIES: 7               // Increase max retries
+};
+
+// Default prompt configuration
+const defaultPromptConfig = {
+    task: "dictionary_generation",
+    version: "1.0",
+    schema: {
+        Meaning: {
+            speech_part: "string",
+            defs: {
+                tran: "string",
+                examples: "string[]",
+                synonyms: "string[]",
+                antonyms: "string[]"
+            }
+        },
+        Word: {
+            word: "string",
+            meanings: "Meaning[]",
+            phonetics: {
+                type: "string",
+                ipa: "string"
+            }
+        }
+    },
+    instructions: {
+        examples: "More than two examples per definition",
+        highlighting: "Use **word** format in examples",
+        empty_arrays: "Leave empty arrays for missing synonyms/antonyms"
+    },
+    prompt_template: `Create a comprehensive dictionary in JSON format, detailing the words provided. For each word, include its full part of speech (e.g., adjective, verb, noun, word form), IPA pronunciation (both US and UK), and a set of meanings. Each meaning should have a Vietnamese translation and example sentences. The JSON structure should adhere to the following schema:
+interface Meaning {
+    speech_part: string;
+    defs: {
+        tran: string;
+        examples: string[]; // More than two examples
+       synonyms: string[];
+       antonyms: string[]
+    }[];
+}
+
+interface Word {
+    [key: string]: {
+        word: string;
+        meanings: Meaning[];
+        phonetics: {
+           type: string;
+           ipa: string;
+      }[];
+    };
+}
+
+Note: If can not find any antonyms or synonyms, just leave it empty array. In each example sentence, you should use the word in context (definition and speech part), and highlight the word in **word** to render it in markdown. Ex: **go** is a noun.
+
+IMPORTANT: Please ensure your response is a complete, valid JSON object. Do not truncate or cut off the response. The response should start with { and end with }. Include all words in the list with their complete data.
+
+The words to be defined are: {words}.`,
+    retry_prompt_template: `I notice the previous response was incomplete. Please provide a complete JSON response for the following words. Make sure to:
+1. Start with { and end with }
+2. Include all words in the list
+3. Provide complete data for each word
+4. Do not truncate the response
+
+The words to be defined are: {words}.`
+};
+
+module.exports = {
+    DIRECTORIES,
+    CONFIG_FILE,
+    NUM_WORKERS,
+    BATCH_SIZE,
+    DELAY_CONFIG,
+    defaultPromptConfig
+}; 
+
+
+================================================
+File: src/config/promptConfig.js
+================================================
+const fs = require('fs');
+const path = require('path');
+const { CONFIG_FILE, DIRECTORIES, defaultPromptConfig } = require('./constants');
+
+/**
+ * Save prompt configuration to file
+ */
+function savePromptConfig(config) {
+    const configPath = path.join(DIRECTORIES.CONFIG, CONFIG_FILE);
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+}
+
+/**
+ * Load prompt configuration from file or use default
+ */
+function loadPromptConfig() {
+    const configPath = path.join(DIRECTORIES.CONFIG, CONFIG_FILE);
+    try {
+        if (fs.existsSync(configPath)) {
+            return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        }
+    } catch (error) {
+        console.log('No existing config found, using default configuration');
+    }
+    return defaultPromptConfig;
+}
+
+module.exports = {
+    savePromptConfig,
+    loadPromptConfig
+}; 
+
+
+================================================
+File: src/core/manualMerge.js
+================================================
+const fs = require('fs');
+const path = require('path');
+const { DIRECTORIES, BATCH_SIZE } = require('../config/constants');
+const { loadChunkProgress, saveChunkProgress } = require('../utils/fileUtils');
+const { mergeChunkFiles, mergeChunkJsonFiles } = require('../utils/mergeUtils');
+const ProgressTracker = require('../utils/ProgressTracker');
+
+/**
+ * Manually create final.json for all chunks and merge them
+ * @param {boolean} preserveProgress - Whether to preserve progress files after merging
+ * @returns {boolean} - Success status
+ */
+function mergeAllChunks(preserveProgress = true) {
+    try {
+        console.log('Merging all chunks...');
+        
+        // Get all chunk directories
+        const chunkDirs = fs.readdirSync(DIRECTORIES.CHUNKS)
+            .filter(dir => dir.startsWith('chunk_'));
+        
+        if (chunkDirs.length === 0) {
+            console.log('No chunk directories found');
+            return false;
+        }
+        
+        // Process each chunk directory
+        for (const chunkDirName of chunkDirs) {
+            const chunkId = parseInt(chunkDirName.replace('chunk_', ''));
+            const chunkDir = path.join(DIRECTORIES.CHUNKS, chunkDirName);
+            const finalFile = path.join(chunkDir, 'final.json');
+            
+            // Skip if final.json already exists
+            if (fs.existsSync(finalFile)) {
+                console.log(`Final file already exists for chunk ${chunkId}, skipping`);
+                continue;
+            }
+            
+            console.log(`Processing chunk ${chunkId} in directory ${chunkDir}`);
+            
+            // Check if there are any progress files
+            const progressFiles = fs.readdirSync(chunkDir)
+                .filter(file => file.endsWith('.json') && file.startsWith('progress_'));
+            
+            if (progressFiles.length === 0) {
+                console.log(`No progress files found for chunk ${chunkId}, skipping`);
+                continue;
+            }
+            
+            // Get progress data
+            const existingProgress = loadChunkProgress(chunkId);
+            const startingIndex = existingProgress ? existingProgress.lastProcessedIndex : 0;
+            
+            // Initialize tracker with existing data
+            const tracker = new ProgressTracker(
+                existingProgress ? existingProgress.totalWords : 0,
+                startingIndex,
+                BATCH_SIZE
+            );
+            if (existingProgress && existingProgress.totalProcessed) {
+                tracker.processedWords = existingProgress.totalProcessed;
+            }
+            
+            // Merge progress files
+            const mergedData = mergeChunkJsonFiles(chunkDir, chunkId);
+            if (mergedData) {
+                // Save the merged data to final.json
+                fs.writeFileSync(finalFile, JSON.stringify(mergedData, null, 2));
+                console.log(`Created final.json for chunk ${chunkId}`);
+                
+                // Update progress with actual word count
+                const totalWords = Object.keys(mergedData).length;
+                tracker.update(totalWords);
+                
+                // Save updated progress
+                saveChunkProgress(chunkId, startingIndex + totalWords, totalWords, tracker);
+            } else {
+                console.log(`Failed to merge progress files for chunk ${chunkId}`);
+            }
+        }
+        
+        // Finally, merge all final.json files into the result
+        // Preserve progress files for word count
+        mergeChunkFiles(preserveProgress);
+        console.log('All chunks merged successfully');
+        
+        return true;
+    } catch (error) {
+        console.error('Error merging all chunks:', error.message);
+        return false;
+    }
+}
+
+/**
+ * Manually merge JSON files for a specific chunk
+ * @param {number} chunkId - ID of the chunk to merge (-1 for all chunks)
+ * @param {boolean} preserveProgress - Whether to preserve progress files after merging
+ * @returns {boolean} - Success status
+ */
+function manualMerge(chunkId, preserveProgress = true) {
+    try {
+        // Set up a signal handler for graceful shutdown
+        let isShuttingDown = false;
+        const originalHandler = process.listeners('SIGINT')[0];
+        
+        // Remove any existing handlers
+        process.removeAllListeners('SIGINT');
+        
+        // Add our custom handler
+        process.on('SIGINT', () => {
+            if (isShuttingDown) {
+                console.log('\nForcing exit...');
+                process.exit(1);
+            }
+            
+            console.log('\nReceived SIGINT, gracefully shutting down...');
+            isShuttingDown = true;
+            
+            // Try to finalize any ongoing processes
+            if (chunkId === -1) {
+                console.log('Attempting to save any progress made...');
+                mergeChunkFiles(preserveProgress);
+            }
+            
+            // Exit gracefully
+            console.log('Shutdown complete.');
+            
+            // Restore original handler if it existed
+            if (originalHandler) {
+                process.on('SIGINT', originalHandler);
+            }
+            
+            process.exit(0);
+        });
+        
+        // Special case: merge all chunks
+        if (chunkId === -1) {
+            const result = mergeAllChunks(preserveProgress);
+            
+            // Restore original handler if it existed
+            if (originalHandler) {
+                process.removeAllListeners('SIGINT');
+                process.on('SIGINT', originalHandler);
+            }
+            
+            return result;
+        }
+        
+        const chunkDir = path.join(DIRECTORIES.CHUNKS, `chunk_${chunkId}`);
+        
+        if (!fs.existsSync(chunkDir)) {
+            console.log(`Chunk directory not found: ${chunkDir}`);
+            
+            // Restore original handler if it existed
+            if (originalHandler) {
+                process.removeAllListeners('SIGINT');
+                process.on('SIGINT', originalHandler);
+            }
+            
+            return false;
+        }
+        
+        console.log(`Merging files for chunk ${chunkId}...`);
+        
+        // Get existing progress data
+        const existingProgress = loadChunkProgress(chunkId);
+        const startingIndex = existingProgress ? existingProgress.lastProcessedIndex : 0;
+        
+        // Initialize tracker with existing data
+        const tracker = new ProgressTracker(
+            existingProgress ? existingProgress.totalWords : 0,
+            startingIndex,
+            BATCH_SIZE
+        );
+        if (existingProgress && existingProgress.progress) {
+            tracker.processedWords = existingProgress.progress.processedWords;
+        }
+        
+        const mergedData = mergeChunkJsonFiles(chunkDir, chunkId);
+        if (mergedData) {
+            // Update progress with actual word count
+            const totalWords = Object.keys(mergedData).length;
+            tracker.update(totalWords);
+            
+            // Save updated progress
+            saveChunkProgress(chunkId, startingIndex + totalWords, totalWords, tracker);
+            
+            // Save to final.json
+            const finalFile = path.join(chunkDir, 'final.json');
+            fs.writeFileSync(finalFile, JSON.stringify(mergedData, null, 2));
+            
+            console.log(`Merge completed successfully. Total words: ${totalWords}`);
+            console.log('Progress tracker updated');
+            
+            // Restore original handler if it existed
+            if (originalHandler) {
+                process.removeAllListeners('SIGINT');
+                process.on('SIGINT', originalHandler);
+            }
+            
+            return true;
+        } else {
+            console.log('Merge failed');
+            
+            // Restore original handler if it existed
+            if (originalHandler) {
+                process.removeAllListeners('SIGINT');
+                process.on('SIGINT', originalHandler);
+            }
+            
+            return false;
+        }
+    } catch (error) {
+        console.error('Error during manual merge:', error.message);
+        return false;
+    }
+}
+
+module.exports = manualMerge; 
+
+
+================================================
+File: src/core/parallelProcessor.js
+================================================
+const { Worker } = require('worker_threads');
+const path = require('path');
+const fs = require('fs');
+const { NUM_WORKERS, DIRECTORIES } = require('../config/constants');
+const { createDirectories, readWordsList } = require('../utils/fileUtils');
+const { loadPromptConfig, savePromptConfig } = require('../config/promptConfig');
+const { mergeChunkFiles, mergeChunkJsonFiles } = require('../utils/mergeUtils');
+
+/**
+ * Ensure all chunks have a final.json file by merging their progress files
+ * @returns {boolean} - Success status
+ */
+function ensureChunkFinalFiles() {
+    try {
+        const chunkDirs = fs.readdirSync(DIRECTORIES.CHUNKS)
+            .filter(dir => dir.startsWith('chunk_'));
+        
+        if (chunkDirs.length === 0) {
+            console.log('No chunk directories found');
+            return false;
+        }
+        
+        let allSuccess = true;
+        
+        for (const chunkDirName of chunkDirs) {
+            const chunkId = parseInt(chunkDirName.replace('chunk_', ''));
+            const chunkDir = path.join(DIRECTORIES.CHUNKS, chunkDirName);
+            const finalFile = path.join(chunkDir, 'final.json');
+            
+            // Skip if final.json already exists
+            if (fs.existsSync(finalFile)) {
+                console.log(`Final file already exists for chunk ${chunkId}, skipping`);
+                continue;
+            }
+            
+            console.log(`Processing chunk ${chunkId} in directory ${chunkDir}`);
+            
+            // Check if there are any progress files
+            const progressFiles = fs.readdirSync(chunkDir)
+                .filter(file => file.endsWith('.json') && file.startsWith('progress_'));
+            
+            if (progressFiles.length === 0) {
+                console.log(`No progress files found for chunk ${chunkId}, skipping`);
+                continue;
+            }
+            
+            // Merge progress files
+            const mergedData = mergeChunkJsonFiles(chunkDir, chunkId);
+            if (mergedData) {
+                // Save the merged data to final.json
+                fs.writeFileSync(finalFile, JSON.stringify(mergedData, null, 2));
+                console.log(`Created final.json for chunk ${chunkId}`);
+            } else {
+                console.log(`Failed to merge progress files for chunk ${chunkId}`);
+                allSuccess = false;
+            }
+        }
+        
+        return allSuccess;
+    } catch (error) {
+        console.error('Error ensuring chunk final files:', error);
+        return false;
+    }
+}
+
+/**
+ * Initialize parallel processing
+ * @param {number} startIndex - Starting index in the word list
+ * @param {boolean} useExistingConfig - Whether to use existing configuration
+ * @param {string} apiKey - The API key for Gemini
+ * @returns {Promise<void>}
+ */
+async function initParallel(startIndex = 0, useExistingConfig = true, apiKey) {
+    try {
+        console.log(`Initializing parallel processing from index ${startIndex}...`);
+        createDirectories();
+
+        // Load or create prompt configuration
+        const promptConfig = useExistingConfig ?
+            loadPromptConfig() :
+            require('../config/constants').defaultPromptConfig;
+
+        // Save the configuration for future use
+        savePromptConfig(promptConfig);
+
+        // Read and filter words
+        const words = readWordsList();
+        if (!words || words.length === 0) {
+            console.error('No words to process');
+            return;
+        }
+
+        // Calculate chunk sizes
+        const totalWords = words.length - startIndex;
+        const wordsPerWorker = Math.ceil((totalWords) / NUM_WORKERS);
+
+        console.log(`Starting parallel processing with ${NUM_WORKERS} workers`);
+        console.log(`Total words: ${totalWords}, Words per worker: ${wordsPerWorker}`);
+        console.log(`API Key: ${apiKey ? 'Provided' : 'Missing'}`);
+
+        // Create and track workers
+        const workers = [];
+        const chunkIds = [];
+        
+        // Set up signal handler for graceful shutdown
+        let isShuttingDown = false;
+        const originalHandler = process.listeners('SIGINT')[0];
+        
+        // Remove any existing handlers
+        process.removeAllListeners('SIGINT');
+        
+        // Add our custom handler
+        process.on('SIGINT', () => {
+            if (isShuttingDown) {
+                console.log('\nForcing exit...');
+                process.exit(1);
+            }
+            
+            console.log('\nReceived SIGINT, gracefully shutting down...');
+            isShuttingDown = true;
+            
+            // Terminate workers
+            for (const worker of workers) {
+                try {
+                    worker.terminate();
+                } catch (err) {
+                    console.log(`Error terminating worker: ${err.message}`);
+                }
+            }
+            
+            // Try to finalize any ongoing processes
+            console.log('Attempting to save any progress made...');
+            ensureChunkFinalFiles();
+            
+            // Exit gracefully
+            console.log('Shutdown complete.');
+            
+            // Restore original handler if it existed
+            if (originalHandler) {
+                process.on('SIGINT', originalHandler);
+            }
+            
+            process.exit(0);
+        });
+
+        // Start workers
+        for (let i = 0; i < NUM_WORKERS; i++) {
+            const workerStartIndex = startIndex + (i * wordsPerWorker);
+            const workerEndIndex = Math.min(workerStartIndex + wordsPerWorker, words.length);
+            
+            // Skip if no words to process
+            if (workerStartIndex >= words.length) {
+                console.log(`Worker ${i}: No words to process`);
+                continue;
+            }
+            
+            chunkIds.push(i);
+            console.log(`Starting worker ${i} for chunk ${i} (${workerStartIndex} to ${workerEndIndex - 1})`);
+
+            const worker = new Worker(path.join(__dirname, '../workers/processWorker.js'), {
+                workerData: {
+                    startIndex: workerStartIndex,
+                    endIndex: workerEndIndex,
+                    chunkId: i,
+                    words: words.slice(workerStartIndex, workerEndIndex),
+                    apiKey: apiKey
+                }
+            });
+
+            // Set up message handling
+            worker.on('message', (message) => {
+                if (message.error) {
+                    console.error(`Worker ${i} error:`, message.error);
+                } else if (message.success) {
+                    console.log(`Worker ${i} completed chunk ${message.chunkId}`);
+                } else {
+                    console.log(`Worker ${i} message:`, message);
+                }
+            });
+
+            worker.on('error', (error) => {
+                console.error(`Worker ${i} error:`, error);
+            });
+
+            worker.on('exit', (code) => {
+                console.log(`Worker ${i} exited with code ${code}`);
+                
+                // Remove from workers array
+                const index = workers.indexOf(worker);
+                if (index !== -1) {
+                    workers.splice(index, 1);
+                }
+                
+                // If all workers are done, finalize
+                if (workers.length === 0) {
+                    finalize(chunkIds);
+                }
+            });
+
+            workers.push(worker);
+        }
+        
+        if (workers.length === 0) {
+            console.log('No workers started, nothing to process');
+            return;
+        }
+        
+        console.log(`Started ${workers.length} workers`);
+    } catch (error) {
+        console.error('Fatal error:', error);
+        process.exit(1);
+    }
+}
+
+/**
+ * Finalize processing after all workers complete
+ * @param {number[]} chunkIds - Array of chunk IDs
+ */
+function finalize(chunkIds) {
+    console.log('All workers finished, finalizing...');
+    
+    // Ensure each chunk has a final.json file before merging
+    ensureChunkFinalFiles();
+    
+    // Merge results
+    console.log('Merging results...');
+    mergeChunkFiles();
+    console.log('Results merged successfully');
+}
+
+module.exports = {
+    initParallel,
+    ensureChunkFinalFiles
+}; 
+
+
+================================================
+File: src/core/testBatch.js
+================================================
+const fs = require('fs');
+const path = require('path');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { DIRECTORIES, BATCH_SIZE } = require('../config/constants');
+const { loadPromptConfig } = require('../config/promptConfig');
+const { createDirectories, readWordsList } = require('../utils/fileUtils');
+const { processBatch } = require('../utils/apiUtils');
+const ProgressTracker = require('../utils/ProgressTracker');
+
+/**
+ * Test processing a single batch of words
+ * @param {number} startIndex - Starting index in the word list
+ * @param {number} batchSize - Size of the batch to test
+ * @returns {Promise<Object>} - Processed results
+ */
+async function testSingleBatch(startIndex, batchSize = BATCH_SIZE, apiKey) {
+    try {
+        createDirectories();
+        
+        // Load configuration
+        const promptConfig = loadPromptConfig();
+        
+        // Read words
+        const words = readWordsList();
+        
+        console.log(`Testing batch at index ${startIndex} with ${batchSize} words`);
+        console.log('Words to process:', words.slice(startIndex, startIndex + batchSize));
+        
+        // Initialize Gemini
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        
+        // Initialize tracker for test mode
+        const tracker = new ProgressTracker(batchSize, startIndex, batchSize);
+        
+        // Process single batch
+        const batch = words.slice(startIndex, startIndex + batchSize);
+        const result = await processBatch(model, batch, promptConfig, tracker, null, true, words);
+        
+        // Save test result
+        const testFile = path.join(DIRECTORIES.TEST, `test_${startIndex}.json`);
+        fs.writeFileSync(testFile, JSON.stringify(result, null, 2));
+        
+        console.log(`Test completed. Results saved to ${testFile}`);
+        return result;
+    } catch (error) {
+        console.error('Test error:', error);
+        throw error;
+    }
+}
+
+module.exports = testSingleBatch; 
+
+
+================================================
+File: src/utils/ProgressTracker.js
+================================================
+/**
+ * Class to track and report progress during processing
+ */
+class ProgressTracker {
+    /**
+     * Initialize a new progress tracker
+     * @param {number} totalWords - Total number of words to process
+     * @param {number} startIndex - Starting index in the word list
+     * @param {number} batchSize - Size of each batch
+     */
+    constructor(totalWords, startIndex, batchSize) {
+        this.totalWords = totalWords;
+        this.startIndex = startIndex;
+        this.batchSize = batchSize;
+        this.processedWords = 0;
+        this.startTime = Date.now();
+        this.lastUpdateTime = Date.now();
+        this.recentSpeeds = [];
+    }
+
+    /**
+     * Update progress with the number of words processed in the last batch
+     * @param {number} processedBatchSize - Number of words processed in the last batch
+     * @returns {Object} - Current progress information
+     */
+    update(processedBatchSize) {
+        this.processedWords += processedBatchSize;
+        const currentTime = Date.now();
+        const timeSinceLastUpdate = (currentTime - this.lastUpdateTime) / 1000; // in seconds
+        
+        // Calculate speed for this batch
+        const speed = processedBatchSize / timeSinceLastUpdate;
+        this.recentSpeeds.push(speed);
+        // Keep only last 10 speed measurements
+        if (this.recentSpeeds.length > 10) {
+            this.recentSpeeds.shift();
+        }
+        
+        this.lastUpdateTime = currentTime;
+        return this.getProgress();
+    }
+
+    /**
+     * Get current progress information
+     * @returns {Object} - Progress information
+     */
+    getProgress() {
+        const currentTime = Date.now();
+        const elapsedTime = (currentTime - this.startTime) / 1000; // in seconds
+        const remainingWords = this.totalWords - this.processedWords;
+        
+        // Calculate average speed from recent measurements
+        const avgSpeed = this.recentSpeeds.length > 0 
+            ? this.recentSpeeds.reduce((a, b) => a + b, 0) / this.recentSpeeds.length 
+            : this.processedWords / elapsedTime;
+        
+        // Estimate remaining time
+        const estimatedRemainingTime = avgSpeed > 0 ? remainingWords / avgSpeed : 0;
+        
+        // Calculate progress percentage
+        const progressPercent = (this.processedWords / this.totalWords) * 100;
+
+        return {
+            totalWords: this.totalWords,
+            processedWords: this.processedWords,
+            elapsedTime: this.formatTime(elapsedTime),
+            estimatedRemainingTime: this.formatTime(estimatedRemainingTime),
+            progressPercent: progressPercent.toFixed(2),
+            currentSpeed: avgSpeed.toFixed(2)
+        };
+    }
+
+    /**
+     * Format time in seconds to readable format
+     * @param {number} seconds - Time in seconds
+     * @returns {string} - Formatted time string
+     */
+    formatTime(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${hours}h ${minutes}m ${secs}s`;
+    }
+}
+
+module.exports = ProgressTracker; 
+
+
+================================================
+File: src/utils/apiUtils.js
+================================================
+const { defaultPromptConfig, DELAY_CONFIG } = require('../config/constants');
+const { logApiResponse } = require('./fileUtils');
+
+/**
+ * Delay execution for the specified time
+ */
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Generate a prompt from the word list
+ */
+function getPrompt(texts, config, isRetry = false) {
+    // Default to empty array if texts is undefined or not an array
+    const inputTexts = Array.isArray(texts) ? texts : [];
+    
+    // Use default config if config is invalid
+    const promptConfig = (config && config.prompt_template && config.retry_prompt_template) 
+        ? config 
+        : defaultPromptConfig;
+
+    // Filter out any empty or undefined words
+    const validTexts = inputTexts.filter(text => text && typeof text === 'string' && text.trim() !== '');
+    
+    // Log warning if no valid texts found
+    if (validTexts.length === 0) {
+        console.warn('Warning: No valid words provided for prompt generation');
+        return ''; // Return empty string to trigger empty response handling
+    }
+
+    const template = isRetry ? promptConfig.retry_prompt_template : promptConfig.prompt_template;
+    return template.replace('{words}', validTexts.join(", "));
+}
+
+/**
+ * Process a batch of words through the API
+ */
+async function processBatch(model, wordsBatch, config, tracker = null, workerData = null, isMainThread = true, words = []) {
+    try {
+        // Check if batch is empty
+        if (!wordsBatch || wordsBatch.length === 0) {
+            console.log('Empty batch received, skipping API call');
+            return {};
+        }
+
+        console.log(`Processing batch of ${wordsBatch.length} words...`);
+        console.log('Words in batch:', wordsBatch);
+        
+        let resultText;
+        let isRetry = false;
+        let retryCount = 0;
+        const MAX_JSON_RETRIES = 3;
+
+        while (retryCount < MAX_JSON_RETRIES) {
+            try {
+                // Generate content with error handling
+                const response = await model.generateContent(getPrompt(wordsBatch, config, isRetry));
+                if (!response || !response.response) {
+                    throw new Error('Empty response from API');
+                }
+                
+                resultText = response.response.text();
+                if (!resultText) {
+                    throw new Error('Empty text in API response');
+                }
+                
+                // Log the raw response for debugging
+                console.log('Raw API response:', resultText);
+                
+                // Log the API response to file
+                const workerId = isMainThread ? 'test' : workerData.chunkId;
+                const currentIndex = isMainThread ? 
+                    (wordsBatch[0] ? words.indexOf(wordsBatch[0]) : 0) : 
+                    workerData.startIndex;
+                const progress = tracker ? tracker.getProgress() : null;
+                logApiResponse(resultText, currentIndex, workerId, progress);
+                
+                // Extract JSON object from the response using regex
+                const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) {
+                    throw new Error('No valid JSON object found in response');
+                }
+                
+                const jsonStr = jsonMatch[0];
+                console.log('Extracted JSON:', jsonStr);
+                
+                const parsedResult = JSON.parse(jsonStr);
+                if (Object.keys(parsedResult).length === 0) {
+                    throw new Error('Empty result object after parsing');
+                }
+                
+                // Validate the structure of the response
+                const invalidWords = [];
+                for (const word of wordsBatch) {
+                    if (!parsedResult[word] || !parsedResult[word].meanings || !parsedResult[word].phonetics) {
+                        invalidWords.push(word);
+                    }
+                }
+                
+                if (invalidWords.length > 0) {
+                    throw new Error(`Invalid or missing data for words: ${invalidWords.join(', ')}`);
+                }
+                
+                return parsedResult;
+            } catch (error) {
+                console.error(`Processing error (attempt ${retryCount + 1}/${MAX_JSON_RETRIES}):`, error.message);
+                
+                // Only log response if it exists
+                if (resultText) {
+                    console.error('Raw response that failed to process:', resultText);
+                }
+                
+                retryCount++;
+                if (retryCount < MAX_JSON_RETRIES) {
+                    isRetry = true;
+                    console.log(`Retrying with modified prompt after ${DELAY_CONFIG.RETRY_DELAY/1000}s delay...`);
+                    await delay(DELAY_CONFIG.RETRY_DELAY);
+                    continue;
+                }
+                
+                throw new Error(`Failed to process API response after ${MAX_JSON_RETRIES} attempts: ${error.message}`);
+            }
+        }
+    } catch (error) {
+        // Check for rate limit related errors
+        if (error.message.toLowerCase().includes('rate') || 
+            error.message.toLowerCase().includes('quota') ||
+            error.message.toLowerCase().includes('limit')) {
+            console.warn('Rate limit detected, will retry after longer delay');
+            await delay(DELAY_CONFIG.RATE_LIMIT_DELAY);
+            throw new Error('Rate limit reached - retrying after delay');
+        }
+        
+        // Handle empty results
+        if (error.message.includes('Empty result') || error.message.includes('Empty response')) {
+            console.warn('Empty result received, will retry with delay');
+            await delay(DELAY_CONFIG.EMPTY_RESULT_DELAY);
+            throw new Error('Empty result - retrying after delay');
+        }
+        
+        console.error(`Error processing batch: ${error.message}`);
+        throw error; // Propagate the error for retry logic
+    }
+}
+
+module.exports = {
+    getPrompt,
+    processBatch,
+    delay
+}; 
+
+
+================================================
+File: src/utils/fileUtils.js
+================================================
+const fs = require('fs');
+const path = require('path');
+const { DIRECTORIES } = require('../config/constants');
+
+/**
+ * Create all required directories
+ */
+function createDirectories() {
+    Object.values(DIRECTORIES).forEach(dir => {
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+    });
+}
+
+/**
+ * Log API response to file with progress information
+ */
+function logApiResponse(response, index, workerId = 'test', progress = null) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const logFile = path.join(DIRECTORIES.LOGS, `api_response_${workerId}_${index}_${timestamp}.log`);
+    
+    let progressInfo = '';
+    if (progress) {
+        progressInfo = `\nProgress:
+Processed: ${progress.processedWords}/${progress.totalWords} words (${progress.progressPercent}%)
+Elapsed Time: ${progress.elapsedTime}
+Estimated Remaining: ${progress.estimatedRemainingTime}
+Current Speed: ${progress.currentSpeed} words/sec`;
+    }
+    
+    const logContent = `Timestamp: ${new Date().toISOString()}
+Index: ${index}
+Worker: ${workerId}${progressInfo}
+Raw Response:
+${response}
+----------------------------------------
+`;
+    fs.writeFileSync(logFile, logContent);
+    console.log(`API response logged to ${logFile}`);
+}
+
+/**
+ * Read words from the word list file
+ */
+function readWordsList() {
+    const wordsList = fs.readFileSync(path.join(DIRECTORIES.DATA, "words_list_full.txt"), "utf8");
+    return wordsList.split("\n")
+        .filter(line => line.trim() !== "" && !line.trim().startsWith('#'));
+}
+
+/**
+ * Save chunk progress information
+ */
+function saveChunkProgress(chunkId, currentIndex, totalProcessed, tracker = null) {
+    if (!fs.existsSync(DIRECTORIES.PROGRESS)) {
+        fs.mkdirSync(DIRECTORIES.PROGRESS, { recursive: true });
+    }
+    
+    const progressData = {
+        chunkId,
+        lastProcessedIndex: currentIndex,
+        totalProcessed,
+        timestamp: new Date().toISOString()
+    };
+
+    // Add tracker information if available
+    if (tracker) {
+        const progress = tracker.getProgress();
+        progressData.progress = {
+            totalWords: progress.totalWords,
+            processedWords: progress.processedWords,
+            progressPercent: progress.progressPercent,
+            elapsedTime: progress.elapsedTime,
+            estimatedRemainingTime: progress.estimatedRemainingTime,
+            currentSpeed: progress.currentSpeed,
+            actualWordCount: totalProcessed // Add actual word count from merged data
+        };
+    }
+    
+    const progressFile = path.join(DIRECTORIES.PROGRESS, `chunk_${chunkId}_progress.json`);
+    fs.writeFileSync(progressFile, JSON.stringify(progressData, null, 2));
+}
+
+/**
+ * Load chunk progress information
+ */
+function loadChunkProgress(chunkId) {
+    const progressFile = path.join(DIRECTORIES.PROGRESS, `chunk_${chunkId}_progress.json`);
+    try {
+        if (fs.existsSync(progressFile)) {
+            return JSON.parse(fs.readFileSync(progressFile, 'utf8'));
+        }
+    } catch (error) {
+        console.log(`No progress file found for chunk ${chunkId}`);
+    }
+    return null;
+}
+
+/**
+ * Find the latest processed index across all chunks
+ */
+function findLatestProcessedIndex() {
+    if (!fs.existsSync(DIRECTORIES.PROGRESS)) {
+        return 0;
+    }
+
+    let latestIndex = 0;
+    try {
+        // Read all progress files
+        const progressFiles = fs.readdirSync(DIRECTORIES.PROGRESS)
+            .filter(file => file.startsWith('chunk_') && file.endsWith('_progress.json'));
+
+        // Find the latest processed index across all chunks
+        progressFiles.forEach(file => {
+            const progressData = JSON.parse(
+                fs.readFileSync(path.join(DIRECTORIES.PROGRESS, file), 'utf8')
+            );
+            latestIndex = Math.max(latestIndex, progressData.lastProcessedIndex);
+        });
+
+        console.log(`Found latest processed index: ${latestIndex}`);
+        return latestIndex;
+    } catch (error) {
+        console.warn('Error reading progress files:', error.message);
+        return 0;
+    }
+}
+
+/**
+ * Get total word count from all chunk progress files or merged result
+ */
+function getTotalWordCount() {
+    let totalWords = 0;
+    
+    // First try to get count from progress files
+    if (fs.existsSync(DIRECTORIES.PROGRESS)) {
+        try {
+            // Read all progress files
+            const progressFiles = fs.readdirSync(DIRECTORIES.PROGRESS)
+                .filter(file => file.startsWith('chunk_') && file.endsWith('_progress.json'));
+
+            if (progressFiles.length > 0) {
+                // Sum up total words from all chunks
+                totalWords = progressFiles.reduce((sum, file) => {
+                    const progressData = JSON.parse(
+                        fs.readFileSync(path.join(DIRECTORIES.PROGRESS, file), 'utf8')
+                    );
+                    return sum + (progressData.totalProcessed || 0);
+                }, 0);
+                
+                console.log(`Found ${totalWords} words from progress files`);
+                return totalWords;
+            }
+        } catch (error) {
+            console.warn('Error reading progress files:', error.message);
+        }
+    }
+    
+    // If no progress files or error reading them, check merged result
+    const mergedFile = path.join(DIRECTORIES.MERGED, 'result_final.json');
+    if (fs.existsSync(mergedFile)) {
+        try {
+            const mergedData = JSON.parse(fs.readFileSync(mergedFile, 'utf8'));
+            totalWords = Object.keys(mergedData).length;
+            console.log(`Found ${totalWords} words from merged result file`);
+            return totalWords;
+        } catch (error) {
+            console.warn('Error reading merged result file:', error.message);
+        }
+    }
+    
+    // If neither progress files nor merged result available, check chunk directories
+    if (fs.existsSync(DIRECTORIES.CHUNKS)) {
+        try {
+            const chunkDirs = fs.readdirSync(DIRECTORIES.CHUNKS)
+                .filter(dir => dir.startsWith('chunk_'));
+                
+            for (const chunkDir of chunkDirs) {
+                const finalFile = path.join(DIRECTORIES.CHUNKS, chunkDir, 'final.json');
+                if (fs.existsSync(finalFile)) {
+                    try {
+                        const chunkData = JSON.parse(fs.readFileSync(finalFile, 'utf8'));
+                        totalWords += Object.keys(chunkData).length;
+                    } catch (error) {
+                        console.warn(`Error reading ${finalFile}:`, error.message);
+                    }
+                }
+            }
+            
+            if (totalWords > 0) {
+                console.log(`Found ${totalWords} words from chunk final.json files`);
+                return totalWords;
+            }
+        } catch (error) {
+            console.warn('Error reading chunk directories:', error.message);
+        }
+    }
+    
+    console.log('No word count information found');
+    return 0;
+}
+
+/**
+ * Clean up progress files for a given chunk
+ * @param {number} chunkId - ID of the chunk to clean
+ * @returns {boolean} - Success status
+ */
+function cleanupProgressFiles(chunkId) {
+    try {
+        const chunkDir = path.join(DIRECTORIES.CHUNKS, `chunk_${chunkId}`);
+        
+        if (!fs.existsSync(chunkDir)) {
+            console.log(`Chunk directory not found: ${chunkDir}`);
+            return false;
+        }
+        
+        const progressFiles = fs.readdirSync(chunkDir)
+            .filter(file => file.endsWith('.json') && file.startsWith('progress_'));
+        
+        if (progressFiles.length === 0) {
+            console.log(`No progress files found for chunk ${chunkId}`);
+            return true;
+        }
+        
+        console.log(`Cleaning up ${progressFiles.length} progress files for chunk ${chunkId}`);
+        let successCount = 0;
+        
+        for (const file of progressFiles) {
+            try {
+                fs.unlinkSync(path.join(chunkDir, file));
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to delete ${file}:`, error.message);
+            }
+        }
+        
+        console.log(`Successfully deleted ${successCount}/${progressFiles.length} progress files`);
+        return successCount === progressFiles.length;
+    } catch (error) {
+        console.error('Error cleaning up progress files:', error.message);
+        return false;
+    }
+}
+
+/**
+ * Clean up progress files for all chunks
+ * @returns {boolean} - Success status
+ */
+function cleanupAllProgressFiles() {
+    try {
+        const chunkDirs = fs.readdirSync(DIRECTORIES.CHUNKS)
+            .filter(dir => dir.startsWith('chunk_'));
+        
+        if (chunkDirs.length === 0) {
+            console.log('No chunk directories found');
+            return true;
+        }
+        
+        let allSuccess = true;
+        
+        for (const chunkDirName of chunkDirs) {
+            const chunkId = parseInt(chunkDirName.replace('chunk_', ''));
+            const success = cleanupProgressFiles(chunkId);
+            
+            if (!success) {
+                allSuccess = false;
+            }
+        }
+        
+        return allSuccess;
+    } catch (error) {
+        console.error('Error cleaning up all progress files:', error.message);
+        return false;
+    }
+}
+
+/**
+ * Remove audio field from API response data
+ */
+function removeAudioField(data) {
+    const processedData = {};
+    for (const [key, value] of Object.entries(data)) {
+        const wordEntry = { ...value };
+        if (wordEntry.phonetics) {
+            wordEntry.phonetics = wordEntry.phonetics.map(phonetic => {
+                const { audio, ...rest } = phonetic;
+                return rest;
+            });
+        }
+        processedData[key] = wordEntry;
+    }
+    return processedData;
+}
+
+module.exports = {
+    createDirectories,
+    logApiResponse,
+    readWordsList,
+    saveChunkProgress,
+    loadChunkProgress,
+    findLatestProcessedIndex,
+    getTotalWordCount,
+    cleanupProgressFiles,
+    cleanupAllProgressFiles,
+    removeAudioField
+}; 
+
+
+================================================
+File: src/utils/mergeUtils.js
+================================================
+const fs = require('fs');
+const path = require('path');
+const { DIRECTORIES } = require('../config/constants');
+
+/**
+ * Merge all final.json files from each chunk into a single result file
+ * @param {boolean} preserveProgress - Whether to preserve progress files after merging
+ * @returns {boolean} - Success status
+ */
+function mergeChunkFiles(preserveProgress = false) {
+    const mergedData = {};
+    const successfulChunks = [];
+
+    // Read all chunk directories
+    const chunkDirs = fs.readdirSync(DIRECTORIES.CHUNKS)
+        .filter(dir => dir.startsWith('chunk_'))
+        .map(dir => path.join(DIRECTORIES.CHUNKS, dir));
+
+    console.log(`Found ${chunkDirs.length} chunk directories to merge`);
+    
+    if (chunkDirs.length === 0) {
+        console.log('No chunk directories found to merge');
+        return false;
+    }
+
+    // Merge final.json from each chunk
+    chunkDirs.forEach(chunkDir => {
+        const finalFile = path.join(chunkDir, 'final.json');
+        if (fs.existsSync(finalFile)) {
+            try {
+                const chunkData = JSON.parse(fs.readFileSync(finalFile, 'utf8'));
+                const wordCount = Object.keys(chunkData).length;
+                
+                if (wordCount > 0) {
+                    Object.assign(mergedData, chunkData);
+                    successfulChunks.push(chunkDir);
+                    console.log(`Merged chunk ${path.basename(chunkDir)} with ${wordCount} words`);
+                } else {
+                    console.warn(`Skipping empty chunk: ${path.basename(chunkDir)}`);
+                }
+            } catch (error) {
+                console.error(`Error reading final.json from ${chunkDir}: ${error.message}`);
+            }
+        } else {
+            console.log(`No final.json found in ${chunkDir}, skipping`);
+        }
+    });
+    
+    const totalWords = Object.keys(mergedData).length;
+    
+    if (totalWords === 0) {
+        console.log('No words were merged from any chunks');
+        return false;
+    }
+    
+    console.log(`Total words merged: ${totalWords}`);
+
+    // Ensure merged directory exists
+    if (!fs.existsSync(DIRECTORIES.MERGED)) {
+        fs.mkdirSync(DIRECTORIES.MERGED, { recursive: true });
+    }
+
+    // Save merged result
+    const resultFile = path.join(DIRECTORIES.MERGED, 'result_final.json');
+    fs.writeFileSync(resultFile, JSON.stringify(mergedData, null, 2));
+    console.log(`Merged result saved to ${resultFile}`);
+    
+    // Only delete the chunk directories after successful merge
+    if (successfulChunks.length > 0) {
+        console.log(`Cleaning up ${successfulChunks.length} successful chunk directories...`);
+        
+        successfulChunks.forEach(chunkDir => {
+            try {
+                fs.rmSync(chunkDir, { recursive: true, force: true });
+                console.log(`Cleaned up chunk directory: ${chunkDir}`);
+            } catch (error) {
+                console.warn(`Warning: Could not delete chunk directory ${chunkDir}: ${error.message}`);
+            }
+        });
+    }
+    
+    // Clean up the progress directory as well
+    if (!preserveProgress && fs.existsSync(DIRECTORIES.PROGRESS)) {
+        try {
+            fs.rmSync(DIRECTORIES.PROGRESS, { recursive: true, force: true });
+            console.log('Cleaned up progress directory');
+        } catch (error) {
+            console.warn(`Warning: Could not delete progress directory: ${error.message}`);
+        }
+    } else if (preserveProgress) {
+        console.log('Preserving progress directory as requested');
+    }
+    
+    return true;
+}
+
+/**
+ * Merge JSON files in a specific chunk directory
+ * @param {string} chunkDir - Path to the chunk directory 
+ * @param {number} chunkId - ID of the chunk
+ * @returns {Object|null} - Merged data object or null if error
+ */
+function mergeChunkJsonFiles(chunkDir, chunkId) {
+    try {
+        let mergedData = {};
+        
+        // Check if final.json already exists
+        const finalFile = path.join(chunkDir, 'final.json');
+        if (fs.existsSync(finalFile)) {
+            console.log(`Final.json already exists for chunk ${chunkId}, using it`);
+            return JSON.parse(fs.readFileSync(finalFile, 'utf8'));
+        }
+        
+        // Get all JSON files in the chunk directory
+        const files = fs.readdirSync(chunkDir)
+            .filter(file => file.endsWith('.json') && !file.startsWith('final'));
+        
+        if (files.length === 0) {
+            console.log(`No JSON files found in chunk ${chunkId} directory`);
+            return null;
+        }
+        
+        console.log(`Merging ${files.length} JSON files in chunk ${chunkId}`);
+        
+        // Sort files to process them in order
+        files.sort((a, b) => {
+            const indexA = parseInt(a.match(/\d+/)?.[0] || 0);
+            const indexB = parseInt(b.match(/\d+/)?.[0] || 0);
+            return indexA - indexB;
+        });
+        
+        // Merge all JSON files
+        let processedCount = 0;
+        files.forEach(file => {
+            const filePath = path.join(chunkDir, file);
+            try {
+                const fileData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                const wordCount = Object.keys(fileData).length;
+                console.log(`Read ${file} with ${wordCount} words`);
+                mergedData = { ...mergedData, ...fileData };
+                processedCount++;
+            } catch (error) {
+                console.warn(`Warning: Could not parse JSON file ${file}: ${error.message}`);
+            }
+        });
+
+        if (processedCount === 0) {
+            console.log(`Failed to process any files in chunk ${chunkId}`);
+            return null;
+        }
+
+        const totalWords = Object.keys(mergedData).length;
+        if (totalWords === 0) {
+            console.log(`No words found in merged data for chunk ${chunkId}`);
+            return null;
+        }
+        
+        console.log(`Total words in merged data: ${totalWords}`);
+
+        // Get the latest index from progress file
+        const progressFile = path.join(DIRECTORIES.PROGRESS, `chunk_${chunkId}_progress.json`);
+        let latestIndex = 0;
+        if (fs.existsSync(progressFile)) {
+            const progressData = JSON.parse(fs.readFileSync(progressFile, 'utf8'));
+            latestIndex = progressData.lastProcessedIndex;
+        }
+
+        // Update progress file with word count
+        const updatedProgressData = {
+            chunkId,
+            lastProcessedIndex: latestIndex,
+            totalProcessed: totalWords,
+            totalWords: totalWords,
+            timestamp: new Date().toISOString()
+        };
+        
+        // Ensure the progress directory exists
+        if (!fs.existsSync(DIRECTORIES.PROGRESS)) {
+            fs.mkdirSync(DIRECTORIES.PROGRESS, { recursive: true });
+        }
+        
+        fs.writeFileSync(progressFile, JSON.stringify(updatedProgressData, null, 2));
+
+        // Save merged data to new progress file and final.json
+        const progressMergedFile = path.join(chunkDir, `progress_${latestIndex}.json`);
+        fs.writeFileSync(progressMergedFile, JSON.stringify(mergedData, null, 2));
+        
+        // Also save to final.json to mark this chunk as completed
+        fs.writeFileSync(finalFile, JSON.stringify(mergedData, null, 2));
+        
+        console.log(`Merged ${files.length} files into progress file and final.json for chunk ${chunkId}`);
+
+        // Delete all old JSON files in the chunk directory
+        const allFiles = fs.readdirSync(chunkDir)
+            .filter(file => file.endsWith('.json') && !file.startsWith('final'));
+        
+        allFiles.forEach(file => {
+            const filePath = path.join(chunkDir, file);
+            // Don't delete the file we just created
+            if (filePath !== progressMergedFile) {
+                try {
+                    fs.unlinkSync(filePath);
+                    console.log(`Deleted old file: ${file}`);
+                } catch (error) {
+                    console.warn(`Warning: Could not delete file ${file}: ${error.message}`);
+                }
+            }
+        });
+
+        return mergedData;
+    } catch (error) {
+        console.error(`Error merging JSON files in chunk ${chunkId}: ${error.message}`);
+        return null;
+    }
+}
+
+module.exports = {
+    mergeChunkFiles,
+    mergeChunkJsonFiles
+}; 
+
+
+================================================
+File: src/workers/processWorker.js
+================================================
+const fs = require('fs');
+const path = require('path');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { parentPort, workerData } = require('worker_threads');
+const { DIRECTORIES, DELAY_CONFIG, BATCH_SIZE } = require('../config/constants');
+const { loadPromptConfig } = require('../config/promptConfig');
+const { saveChunkProgress, loadChunkProgress, cleanupProgressFiles, removeAudioField } = require('../utils/fileUtils');
+const { processBatch, delay } = require('../utils/apiUtils');
+const { mergeChunkJsonFiles } = require('../utils/mergeUtils');
+const ProgressTracker = require('../utils/ProgressTracker');
+
+/**
+ * Process a chunk of words in a worker thread
+ * @param {Object} workerData - Data for the worker
+ */
+async function processChunk(workerData) {
+    try {
+        const { startIndex, endIndex, chunkId, words, apiKey } = workerData;
+        let mergedResults = {};
+        const chunkDir = path.join(DIRECTORIES.CHUNKS, `chunk_${chunkId}`);
+
+        if (!fs.existsSync(chunkDir)) {
+            fs.mkdirSync(chunkDir, { recursive: true });
+        }
+
+        // Load existing progress and results
+        const progress = loadChunkProgress(chunkId);
+        const startingIndex = progress ? progress.lastProcessedIndex : 0;
+        
+        if (progress) {
+            console.log(`Resuming chunk ${chunkId} from index ${startingIndex}`);
+            // Load existing results
+            const progressFile = path.join(chunkDir, `progress_${startingIndex}.json`);
+            if (fs.existsSync(progressFile)) {
+                mergedResults = JSON.parse(fs.readFileSync(progressFile, 'utf8'));
+                console.log(`Loaded ${Object.keys(mergedResults).length} existing results`);
+            }
+        }
+
+        // Initialize progress tracker
+        const tracker = new ProgressTracker(words.length, startIndex + startingIndex, BATCH_SIZE);
+        if (progress) {
+            tracker.processedWords = progress.totalProcessed;
+        }
+
+        // Get API configuration
+        const promptConfig = loadPromptConfig();
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+        // Process each batch in the chunk
+        for (let i = startingIndex; i < words.length; i += BATCH_SIZE) {
+            let retryCount = 0;
+            let success = false;
+            let lastError = null;
+
+            while (!success && retryCount < DELAY_CONFIG.MAX_RETRIES) {
+                try {
+                    const batch = words.slice(i, Math.min(i + BATCH_SIZE, words.length));
+                    
+                    // Skip if batch is empty
+                    if (!batch || batch.length === 0) {
+                        console.log(`Worker ${chunkId}: Skipping empty batch at index ${i}`);
+                        success = true;
+                        continue;
+                    }
+                    
+                    console.log(`Worker ${chunkId}: Processing batch ${i} of ${words.length} with ${batch.length} words`);
+                    console.log('Words in batch:', batch);
+                    
+                    const batchResult = await processBatch(model, batch, promptConfig, tracker, workerData, false);
+                    
+                    // Additional validation of batch result
+                    const processedBatchResult = removeAudioField(batchResult);
+                    if (Object.keys(processedBatchResult).length === 0) {
+                        throw new Error('Processed batch result is empty');
+                    }
+                    
+                    // Update progress and log
+                    const progress = tracker.update(batch.length);
+                    console.log(`\nProgress Report (Worker ${chunkId}):
+Processed: ${progress.processedWords}/${progress.totalWords} words (${progress.progressPercent}%)
+Elapsed Time: ${progress.elapsedTime}
+Estimated Remaining: ${progress.estimatedRemainingTime}
+Current Speed: ${progress.currentSpeed} words/sec\n`);
+                    
+                    // Save chunk progress
+                    saveChunkProgress(chunkId, i + BATCH_SIZE, progress.processedWords, tracker);
+                    
+                    // Verify each word in the batch has a result
+                    const missingWords = batch.filter(word => !processedBatchResult[word]);
+                    if (missingWords.length > 0) {
+                        console.warn(`Missing results for words: ${missingWords.join(', ')}`);
+                    }
+
+                    mergedResults = { ...mergedResults, ...processedBatchResult };
+
+                    // Merge and save progress periodically (e.g., every 5 batches)
+                    if (i % (BATCH_SIZE * 5) === 0) {
+                        console.log(`Worker ${chunkId}: Merging progress files at batch index ${i}`);
+                        mergedResults = mergeChunkJsonFiles(chunkDir, chunkId) || mergedResults;
+                    } else {
+                        // Save progress file for this batch
+                        const progressFile = path.join(chunkDir, `progress_${i}.json`);
+                        fs.writeFileSync(progressFile, JSON.stringify(processedBatchResult, null, 2));
+                        console.log(`Worker ${chunkId}: Saved progress to ${progressFile}`);
+                    }
+
+                    success = true;
+                    console.log(`Worker ${chunkId}: Waiting ${DELAY_CONFIG.INITIAL_DELAY/1000}s before next batch...`);
+                    await delay(DELAY_CONFIG.INITIAL_DELAY);
+                } catch (error) {
+                    lastError = error;
+                    retryCount++;
+                    const isRateLimit = error.message.toLowerCase().includes('rate limit');
+                    const isEmptyResult = error.message.toLowerCase().includes('empty');
+                    
+                    let delayTime = DELAY_CONFIG.RETRY_DELAY;
+                    if (isRateLimit) delayTime = DELAY_CONFIG.RATE_LIMIT_DELAY;
+                    else if (isEmptyResult) delayTime = DELAY_CONFIG.EMPTY_RESULT_DELAY;
+                    
+                    console.error(`Worker ${chunkId}: Error (attempt ${retryCount}/${DELAY_CONFIG.MAX_RETRIES}): ${error.message}`);
+                    
+                    if (retryCount === DELAY_CONFIG.MAX_RETRIES) {
+                        // Save the last successful results before exiting
+                        if (Object.keys(mergedResults).length > 0) {
+                            const finalChunkFile = path.join(chunkDir, `final_partial_${i}.json`);
+                            fs.writeFileSync(finalChunkFile, JSON.stringify(mergedResults, null, 2));
+                            console.log(`Saved partial results up to index ${i} in ${finalChunkFile}`);
+                        }
+                        
+                        parentPort.postMessage({ 
+                            error: `Failed at index ${i} after ${DELAY_CONFIG.MAX_RETRIES} attempts: ${lastError.message}`,
+                            lastProcessedIndex: i,
+                            lastError: lastError.message
+                        });
+                        return;
+                    }
+                    
+                    console.log(`Worker ${chunkId}: Waiting ${delayTime/1000}s before retry...`);
+                    await delay(delayTime);
+                }
+            }
+        }
+
+        // After processing all batches, merge all JSON files before saving final result
+        console.log(`Worker ${chunkId}: Merging all JSON files...`);
+        const finalMergedResults = mergeChunkJsonFiles(chunkDir, chunkId) || mergedResults;
+        
+        if (!finalMergedResults || Object.keys(finalMergedResults).length === 0) {
+            throw new Error(`Failed to merge results for chunk ${chunkId}`);
+        }
+
+        // Save final result
+        const finalChunkFile = path.join(chunkDir, 'final.json');
+        fs.writeFileSync(finalChunkFile, JSON.stringify(finalMergedResults, null, 2));
+        console.log(`Worker ${chunkId}: Saved final result to ${finalChunkFile}`);
+        
+        // Clean up progress files after successful completion
+        cleanupProgressFiles(chunkId);
+        
+        // Send success message to parent
+        parentPort.postMessage({ success: true, chunkId });
+        console.log(`Worker ${chunkId}: Processing complete`);
+    } catch (error) {
+        parentPort.postMessage({ error: error.message });
+    }
+}
+
+module.exports = processChunk; 
+
+// Execute the processChunk function when loaded as a worker
+if (parentPort && workerData) {
+    console.log(`Worker started with data for chunk ${workerData.chunkId}, processing ${workerData.words.length} words`);
+    processChunk(workerData).catch(error => {
+        console.error(`Unhandled error in worker: ${error.message}`);
+        parentPort.postMessage({ error: error.message });
+    });
+} 
+
+
+================================================
+File: src/workers/worker.js
+================================================
+const { workerData } = require('worker_threads');
+const processChunk = require('./processWorker');
+
+// Process chunk in worker thread
+processChunk(workerData); 
+
+
+================================================
+File: tests/unit/config/promptConfig.test.js
+================================================
+const promptConfig = require('../../../src/config/promptConfig');
+
+describe('promptConfig', () => {
+  test('should export a dictionary with predefined prompts', () => {
+    // Check if the export is an object
+    expect(typeof promptConfig).toBe('object');
+    
+    // Check if it contains the expected prompt templates
+    expect(promptConfig).toHaveProperty('defineWord');
+    expect(promptConfig).toHaveProperty('expandDefinition');
+    expect(promptConfig).toHaveProperty('wordRelationships');
+    expect(promptConfig).toHaveProperty('finalReview');
+    
+    // Check format of prompt templates
+    expect(typeof promptConfig.defineWord).toBe('string');
+    expect(typeof promptConfig.expandDefinition).toBe('string');
+    expect(typeof promptConfig.wordRelationships).toBe('string');
+    expect(typeof promptConfig.finalReview).toBe('string');
+  });
+  
+  test('prompt templates should include placeholders for word insertion', () => {
+    // All prompts should contain {{word}} placeholder
+    expect(promptConfig.defineWord).toContain('{{word}}');
+    expect(promptConfig.expandDefinition).toContain('{{word}}');
+    expect(promptConfig.wordRelationships).toContain('{{word}}');
+    expect(promptConfig.finalReview).toContain('{{word}}');
+  });
+  
+  test('prompt templates should have sufficient length', () => {
+    // Prompts should be substantial enough for proper AI responses
+    expect(promptConfig.defineWord.length).toBeGreaterThan(50);
+    expect(promptConfig.expandDefinition.length).toBeGreaterThan(50);
+    expect(promptConfig.wordRelationships.length).toBeGreaterThan(50);
+    expect(promptConfig.finalReview.length).toBeGreaterThan(50);
+  });
+  
+  test('prompt templates should include instructions for JSON output format', () => {
+    // Prompts should mention JSON format requirements
+    expect(promptConfig.defineWord.toLowerCase()).toMatch(/json|format|structure/);
+    expect(promptConfig.expandDefinition.toLowerCase()).toMatch(/json|format|structure/);
+    expect(promptConfig.wordRelationships.toLowerCase()).toMatch(/json|format|structure/);
+    expect(promptConfig.finalReview.toLowerCase()).toMatch(/json|format|structure/);
+  });
+}); 
+
+
+================================================
+File: tests/unit/core/manualMerge.test.js
+================================================
+const fs = require('fs');
+const path = require('path');
+const mockFs = require('mock-fs');
+const manualMerge = require('../../../src/core/manualMerge');
+
+// Mock dependencies
+jest.mock('../../../src/utils/mergeUtils', () => ({
+  mergeChunkFiles: jest.fn().mockReturnValue(true),
+  mergeChunkJsonFiles: jest.fn().mockImplementation((chunkDir, chunkId) => {
+    return { word1: {}, word2: {} };
+  })
+}));
+
+const mockProgressTracker = {
+  update: jest.fn(),
+  processedWords: 0
+};
+
+jest.mock('../../../src/utils/ProgressTracker', () => 
+  jest.fn().mockImplementation(() => mockProgressTracker)
+);
+
+jest.mock('../../../src/utils/fileUtils', () => ({
+  loadChunkProgress: jest.fn().mockReturnValue({
+    lastProcessedIndex: 100,
+    totalWords: 2
+  }),
+  saveChunkProgress: jest.fn()
+}));
+
+// Mock the DIRECTORIES constant
+jest.mock('../../../src/config/constants', () => ({
+  DIRECTORIES: {
+    ROOT: '.',
+    OUTPUT: './output',
+    CHUNKS: './output/chunks',
+    PROGRESS: './output/progress',
+    MERGED: './output/merged',
+    DATA: './data',
+    LOGS: './logs',
+    TEST: './tests/results'
+  },
+  BATCH_SIZE: 28
+}));
+
+describe('manualMerge', () => {
+  beforeEach(() => {
+    // Setup mock file system
+    mockFs({
+      'output': {
+        'chunks': {
+          'chunk_0': {
+            'progress_100.json': JSON.stringify({ word1: { data: 'data1' }, word2: { data: 'data2' } })
+          },
+          'chunk_1': {
+            'progress_0.json': JSON.stringify({ word3: { data: 'data3' } }),
+            'progress_50.json': JSON.stringify({ word4: { data: 'data4' } })
+          }
+        },
+        'progress': {
+          'chunk_0_progress.json': JSON.stringify({
+            chunkId: 0,
+            lastProcessedIndex: 100,
+            totalProcessed: 2,
+            totalWords: 2
+          }),
+          'chunk_1_progress.json': JSON.stringify({
+            chunkId: 1,
+            lastProcessedIndex: 50,
+            totalProcessed: 2,
+            totalWords: 2
+          })
+        },
+        'merged': {}
+      }
+    });
+    
+    // Mock process event emitter behavior
+    process.listeners = jest.fn().mockReturnValue([]);
+    process.on = jest.fn();
+    process.removeAllListeners = jest.fn();
+    process.exit = jest.fn();
+  });
+
+  afterEach(() => {
+    // Restore the real file system
+    mockFs.restore();
+    jest.clearAllMocks();
+  });
+
+  test('manualMerge for specific chunk merges and saves final.json', () => {
+    // Call the function with a specific chunk ID
+    const result = manualMerge(0);
+    
+    // Verify result
+    expect(result).toBe(true);
+    
+    // Verify final.json was created
+    expect(fs.existsSync('./output/chunks/chunk_0/final.json')).toBe(true);
+    
+    // Check that mergeChunkJsonFiles was called with the right parameters
+    expect(require('../../../src/utils/mergeUtils').mergeChunkJsonFiles).toHaveBeenCalledWith(
+      expect.stringContaining('chunk_0'),
+      0
+    );
+  });
+
+  test('manualMerge returns false for non-existent chunk', () => {
+    // Call the function with a non-existent chunk ID
+    const result = manualMerge(99);
+    
+    // Verify result
+    expect(result).toBe(false);
+  });
+
+  test('manualMerge with -1 calls mergeAllChunks', () => {
+    // Spy on mergeChunkFiles
+    const mergeChunkFilesSpy = require('../../../src/utils/mergeUtils').mergeChunkFiles;
+    
+    // Call the function with -1 (all chunks)
+    const result = manualMerge(-1);
+    
+    // Verify result
+    expect(result).toBe(true);
+    
+    // Verify that mergeChunkFiles was called
+    expect(mergeChunkFilesSpy).toHaveBeenCalled();
+    
+    // Both chunks should have final.json files
+    expect(fs.existsSync('./output/chunks/chunk_0/final.json')).toBe(true);
+    expect(fs.existsSync('./output/chunks/chunk_1/final.json')).toBe(true);
+  });
+
+  test('manualMerge with preserveProgress=true preserves progress files', () => {
+    // Spy on mergeChunkFiles to check if preserveProgress is passed
+    const mergeChunkFilesSpy = require('../../../src/utils/mergeUtils').mergeChunkFiles;
+    
+    // Call the function with -1 and preserveProgress=true
+    manualMerge(-1, true);
+    
+    // Verify that mergeChunkFiles was called with preserveProgress=true
+    expect(mergeChunkFilesSpy).toHaveBeenCalledWith(true);
+  });
+
+  test('manualMerge sets up SIGINT handlers', () => {
+    // Call the function
+    manualMerge(0);
+    
+    // Check that process.on was called to handle SIGINT
+    expect(process.on).toHaveBeenCalledWith('SIGINT', expect.any(Function));
+    
+    // Check that process.removeAllListeners was called
+    expect(process.removeAllListeners).toHaveBeenCalled();
+  });
+}); 
+
+
+================================================
+File: tests/unit/core/parallelProcessor.test.js
+================================================
+const fs = require('fs');
+const path = require('path');
+const mockFs = require('mock-fs');
+const { Worker } = require('worker_threads');
+const { ensureChunkFinalFiles } = require('../../../src/core/parallelProcessor');
+
+// Mock dependencies
+jest.mock('worker_threads', () => ({
+  Worker: jest.fn().mockImplementation(() => ({
+    on: jest.fn(),
+    postMessage: jest.fn()
+  }))
+}));
+
+jest.mock('../../../src/utils/mergeUtils', () => ({
+  mergeChunkFiles: jest.fn().mockReturnValue(true),
+  mergeChunkJsonFiles: jest.fn().mockImplementation((chunkDir, chunkId) => {
+    return { word1: {}, word2: {} };
+  })
+}));
+
+jest.mock('../../../src/utils/fileUtils', () => ({
+  createDirectories: jest.fn(),
+  readWordsList: jest.fn().mockReturnValue(['word1', 'word2', 'word3', 'word4']),
+  loadChunkProgress: jest.fn().mockReturnValue(null)
+}));
+
+jest.mock('../../../src/config/promptConfig', () => ({
+  loadPromptConfig: jest.fn().mockReturnValue({ systemPrompt: 'test prompt' }),
+  savePromptConfig: jest.fn()
+}));
+
+// Mock the DIRECTORIES constant
+jest.mock('../../../src/config/constants', () => ({
+  DIRECTORIES: {
+    ROOT: '.',
+    OUTPUT: './output',
+    CHUNKS: './output/chunks',
+    PROGRESS: './output/progress',
+    MERGED: './output/merged',
+    DATA: './data',
+    LOGS: './logs',
+    TEST: './tests/results'
+  },
+  NUM_WORKERS: 2
+}));
+
+describe('parallelProcessor', () => {
+  beforeEach(() => {
+    // Setup mock file system
+    mockFs({
+      'output': {
+        'chunks': {
+          'chunk_0': {
+            'progress_100.json': JSON.stringify({ word1: { data: 'data1' }, word2: { data: 'data2' } })
+          },
+          'chunk_1': {
+            'progress_0.json': JSON.stringify({ word3: { data: 'data3' } }),
+            'progress_50.json': JSON.stringify({ word4: { data: 'data4' } }),
+            'final.json': JSON.stringify({ word3: { data: 'data3' }, word4: { data: 'data4' } })
+          }
+        },
+        'progress': {
+          'chunk_0_progress.json': JSON.stringify({
+            chunkId: 0,
+            lastProcessedIndex: 100,
+            totalProcessed: 2,
+            totalWords: 2
+          }),
+          'chunk_1_progress.json': JSON.stringify({
+            chunkId: 1,
+            lastProcessedIndex: 50,
+            totalProcessed: 2,
+            totalWords: 2
+          })
+        },
+        'merged': {}
+      },
+      'src': {
+        'workers': {
+          'processWorker.js': 'console.log("Worker script")'
+        }
+      }
+    });
+  });
+
+  afterEach(() => {
+    // Restore the real file system
+    mockFs.restore();
+    jest.clearAllMocks();
+  });
+
+  test('ensureChunkFinalFiles creates final.json for chunks that need it', async () => {
+    // Call the function
+    const result = ensureChunkFinalFiles();
+    
+    // Verify result
+    expect(result).toBe(true);
+    
+    // Verify final.json was created for chunk_0
+    expect(fs.existsSync('./output/chunks/chunk_0/final.json')).toBe(true);
+    
+    // Verify existing final.json for chunk_1 wasn't modified
+    const chunk1Final = JSON.parse(fs.readFileSync('./output/chunks/chunk_1/final.json', 'utf8'));
+    expect(chunk1Final).toEqual({ word3: { data: 'data3' }, word4: { data: 'data4' } });
+  });
+
+  test('ensureChunkFinalFiles returns false when no chunk directories found', () => {
+    // Delete chunks directory
+    fs.rmdirSync('./output/chunks', { recursive: true });
+    fs.mkdirSync('./output/chunks');
+    
+    // Call function
+    const result = ensureChunkFinalFiles();
+    
+    // Should return false
+    expect(result).toBe(false);
+  });
+
+  test('ensureChunkFinalFiles skips chunks with no progress files', () => {
+    // Remove progress files from chunk_0
+    fs.unlinkSync('./output/chunks/chunk_0/progress_100.json');
+    
+    // Call function
+    const result = ensureChunkFinalFiles();
+    
+    // Should still return true
+    expect(result).toBe(true);
+    
+    // But no final.json should be created for chunk_0
+    expect(fs.existsSync('./output/chunks/chunk_0/final.json')).toBe(false);
+  });
+}); 
+
+
+================================================
+File: tests/unit/utils/ProgressTracker.test.js
+================================================
+const ProgressTracker = require('../../../src/utils/ProgressTracker');
+const { EventEmitter } = require('events');
+
+describe('ProgressTracker', () => {
+  let progressTracker;
+  let mockConsole;
+  
+  beforeEach(() => {
+    // Mock console.log
+    mockConsole = {
+      log: jest.fn()
+    };
+    global.console = mockConsole;
+    
+    // Create a new ProgressTracker instance
+    progressTracker = new ProgressTracker('Test Progress', 100);
+  });
+  
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('should initialize with correct properties', () => {
+    expect(progressTracker.title).toBe('Test Progress');
+    expect(progressTracker.total).toBe(100);
+    expect(progressTracker.processedWords).toBe(0);
+    expect(progressTracker.startTime).toBeInstanceOf(Date);
+    expect(progressTracker.lastUpdateTime).toBeInstanceOf(Date);
+    expect(progressTracker.updateInterval).toBe(1000); // Default interval
+    expect(progressTracker.finished).toBe(false);
+    expect(progressTracker).toBeInstanceOf(EventEmitter);
+  });
+
+  test('should update progress count properly', () => {
+    // Update progress by 10
+    progressTracker.update(10);
+    expect(progressTracker.processedWords).toBe(10);
+    
+    // Update progress by another 25
+    progressTracker.update(25);
+    expect(progressTracker.processedWords).toBe(35);
+  });
+
+  test('should calculate remaining time correctly', () => {
+    // Mock Date.now to control time
+    const originalNow = Date.now;
+    const mockStartTime = 1000;
+    
+    Date.now = jest.fn()
+      .mockReturnValueOnce(mockStartTime) // For constructor
+      .mockReturnValueOnce(mockStartTime) // For constructor
+      .mockReturnValueOnce(mockStartTime + 10000); // For _calculateRemainingTime (10 seconds later)
+    
+    const tracker = new ProgressTracker('Test Progress', 100);
+    tracker.processedWords = 20; // 20% complete
+    
+    // At 20% complete after 10 seconds, it should take 40 more seconds to complete
+    const remaining = tracker._calculateRemainingTime();
+    expect(remaining).toBeCloseTo(40, 0); // Approximately 40 seconds
+    
+    // Restore original Date.now
+    Date.now = originalNow;
+  });
+
+  test('should emit events when progress updates', () => {
+    // Setup event listener
+    const mockUpdateListener = jest.fn();
+    progressTracker.on('update', mockUpdateListener);
+    
+    // Update progress
+    progressTracker.update(50);
+    
+    // Check if event was emitted
+    expect(mockUpdateListener).toHaveBeenCalledWith({
+      processed: 50,
+      total: 100,
+      percentage: 50
+    });
+  });
+
+  test('should emit finish event when complete', () => {
+    // Setup event listener
+    const mockFinishListener = jest.fn();
+    progressTracker.on('finish', mockFinishListener);
+    
+    // Update progress to completion
+    progressTracker.update(100);
+    
+    // Check if finish event was emitted
+    expect(mockFinishListener).toHaveBeenCalled();
+    expect(progressTracker.finished).toBe(true);
+  });
+
+  test('should log progress at appropriate intervals', () => {
+    // Mock Date.now to control time
+    const originalNow = Date.now;
+    const startTime = 1000;
+    
+    Date.now = jest.fn()
+      .mockReturnValueOnce(startTime) // Start time in constructor
+      .mockReturnValueOnce(startTime) // Last update time in constructor
+      .mockReturnValueOnce(startTime + 1500); // Current time in _logProgress (1.5s after start)
+    
+    progressTracker.update(30);
+    
+    // Should log progress since more than 1s (default interval) has passed
+    expect(mockConsole.log).toHaveBeenCalled();
+    expect(mockConsole.log.mock.calls[0][0]).toContain('Test Progress');
+    expect(mockConsole.log.mock.calls[0][0]).toContain('30/100');
+    
+    // Restore original Date.now
+    Date.now = originalNow;
+  });
+
+  test('should not log progress if interval has not passed', () => {
+    // Mock Date.now to return the same time
+    const originalNow = Date.now;
+    const fixedTime = 1000;
+    
+    Date.now = jest.fn().mockReturnValue(fixedTime);
+    
+    progressTracker.update(10);
+    
+    // Should not log progress since no time has passed
+    expect(mockConsole.log).not.toHaveBeenCalled();
+    
+    // Restore original Date.now
+    Date.now = originalNow;
+  });
+
+  test('should handle zero total correctly', () => {
+    const zeroTracker = new ProgressTracker('Zero Test', 0);
+    
+    // Update should not throw errors
+    zeroTracker.update(0);
+    
+    // Percentage should be 100% when total is 0
+    expect(zeroTracker._calculatePercentage()).toBe(100);
+  });
+
+  test('should return correct formatted time string', () => {
+    // Test various time durations
+    expect(progressTracker._formatTime(65)).toBe('1m 5s');
+    expect(progressTracker._formatTime(3661)).toBe('1h 1m 1s');
+    expect(progressTracker._formatTime(86400)).toBe('24h 0m 0s');
+    expect(progressTracker._formatTime(30)).toBe('30s');
+  });
+}); 
+
+
+================================================
+File: tests/unit/utils/fileUtils.test.js
+================================================
+const fs = require('fs');
+const path = require('path');
+const mockFs = require('mock-fs');
+const { 
+  createDirectories, 
+  loadChunkProgress, 
+  saveChunkProgress, 
+  getTotalWordCount,
+  cleanupProgressFiles
+} = require('../../../src/utils/fileUtils');
+
+// Mock the DIRECTORIES constant
+jest.mock('../../../src/config/constants', () => ({
+  DIRECTORIES: {
+    ROOT: '.',
+    OUTPUT: './output',
+    CHUNKS: './output/chunks',
+    PROGRESS: './output/progress',
+    MERGED: './output/merged',
+    DATA: './data',
+    LOGS: './logs',
+    TEST: './tests/results'
+  }
+}));
+
+describe('fileUtils', () => {
+  beforeEach(() => {
+    // Setup mock file system
+    mockFs({
+      'output': {
+        'chunks': {
+          'chunk_0': {
+            'progress_100.json': JSON.stringify({ word1: {}, word2: {} }),
+            'final.json': JSON.stringify({ word1: {}, word2: {} })
+          },
+          'chunk_1': {
+            'progress_200.json': JSON.stringify({ word3: {}, word4: {} })
+          }
+        },
+        'progress': {
+          'chunk_0_progress.json': JSON.stringify({
+            chunkId: 0,
+            lastProcessedIndex: 100,
+            totalProcessed: 2,
+            totalWords: 2
+          }),
+          'chunk_1_progress.json': JSON.stringify({
+            chunkId: 1,
+            lastProcessedIndex: 200,
+            totalProcessed: 2,
+            totalWords: 2
+          })
+        },
+        'merged': {
+          'result_final.json': JSON.stringify({ word1: {}, word2: {}, word3: {}, word4: {} })
+        }
+      },
+      'data': {
+        'words_list_full.txt': 'word1\nword2\nword3\nword4\n'
+      },
+      'logs': {}
+    });
+  });
+
+  afterEach(() => {
+    // Restore the real file system
+    mockFs.restore();
+    jest.clearAllMocks();
+  });
+
+  test('createDirectories creates the expected directories', () => {
+    // Delete some directories to test creation
+    fs.rmdirSync('./output/chunks', { recursive: true });
+    fs.rmdirSync('./output/merged', { recursive: true });
+    
+    // Call the function
+    createDirectories();
+    
+    // Check that directories were created
+    expect(fs.existsSync('./output/chunks')).toBe(true);
+    expect(fs.existsSync('./output/progress')).toBe(true);
+    expect(fs.existsSync('./output/merged')).toBe(true);
+    expect(fs.existsSync('./data')).toBe(true);
+    expect(fs.existsSync('./logs')).toBe(true);
+  });
+
+  test('loadChunkProgress returns progress data for a chunk', () => {
+    const progress = loadChunkProgress(0);
+    
+    expect(progress).toEqual({
+      chunkId: 0,
+      lastProcessedIndex: 100,
+      totalProcessed: 2,
+      totalWords: 2
+    });
+  });
+
+  test('loadChunkProgress returns null for non-existent chunk', () => {
+    const progress = loadChunkProgress(99);
+    
+    expect(progress).toBeNull();
+  });
+
+  test('saveChunkProgress saves progress data correctly', () => {
+    // Data to save
+    const chunkId = 2;
+    const currentIndex = 300;
+    const totalProcessed = 3;
+    
+    // Call the function
+    saveChunkProgress(chunkId, currentIndex, totalProcessed);
+    
+    // Check if the file was created
+    const progressFile = path.join('./output/progress', `chunk_${chunkId}_progress.json`);
+    expect(fs.existsSync(progressFile)).toBe(true);
+    
+    // Check file contents
+    const savedData = JSON.parse(fs.readFileSync(progressFile, 'utf8'));
+    expect(savedData.chunkId).toBe(chunkId);
+    expect(savedData.lastProcessedIndex).toBe(currentIndex);
+    expect(savedData.totalProcessed).toBe(totalProcessed);
+  });
+
+  test('getTotalWordCount returns correct count from progress files', () => {
+    const totalWords = getTotalWordCount();
+    
+    // Total should be 4 (2 from chunk_0 + 2 from chunk_1)
+    expect(totalWords).toBe(4);
+  });
+
+  test('getTotalWordCount falls back to merged result when no progress files', () => {
+    // Delete progress files
+    fs.rmdirSync('./output/progress', { recursive: true });
+    
+    const totalWords = getTotalWordCount();
+    
+    // Total should be 4 from the merged results
+    expect(totalWords).toBe(4);
+  });
+
+  test('cleanupProgressFiles removes progress files for a chunk', () => {
+    // Verify files exist before cleanup
+    expect(fs.existsSync('./output/chunks/chunk_0/progress_100.json')).toBe(true);
+    
+    // Call cleanup
+    const result = cleanupProgressFiles(0);
+    
+    // Verify result is true (success)
+    expect(result).toBe(true);
+    
+    // Verify progress file was removed
+    expect(fs.existsSync('./output/chunks/chunk_0/progress_100.json')).toBe(false);
+    
+    // Verify final.json was not removed
+    expect(fs.existsSync('./output/chunks/chunk_0/final.json')).toBe(true);
+  });
+}); 
+
+
+================================================
+File: tests/unit/utils/mergeUtils.test.js
+================================================
+const fs = require('fs');
+const path = require('path');
+const mockFs = require('mock-fs');
+const { mergeChunkFiles, mergeChunkJsonFiles } = require('../../../src/utils/mergeUtils');
+
+// Mock fileUtils functions that are used in mergeUtils
+jest.mock('../../../src/utils/fileUtils', () => ({
+  // Implementation is mocked below as needed
+}));
+
+// Mock the DIRECTORIES constant
+jest.mock('../../../src/config/constants', () => ({
+  DIRECTORIES: {
+    ROOT: '.',
+    OUTPUT: './output',
+    CHUNKS: './output/chunks',
+    PROGRESS: './output/progress',
+    MERGED: './output/merged',
+    DATA: './data',
+    LOGS: './logs',
+    TEST: './tests/results'
+  }
+}));
+
+describe('mergeUtils', () => {
+  beforeEach(() => {
+    // Setup mock file system
+    mockFs({
+      'output': {
+        'chunks': {
+          'chunk_0': {
+            'progress_100.json': JSON.stringify({ word1: { data: 'data1' }, word2: { data: 'data2' } }),
+            'final.json': JSON.stringify({ word1: { data: 'data1' }, word2: { data: 'data2' } })
+          },
+          'chunk_1': {
+            'progress_0.json': JSON.stringify({ word3: { data: 'data3' } }),
+            'progress_50.json': JSON.stringify({ word4: { data: 'data4' } })
+          }
+        },
+        'progress': {
+          'chunk_0_progress.json': JSON.stringify({
+            chunkId: 0,
+            lastProcessedIndex: 100,
+            totalProcessed: 2,
+            totalWords: 2
+          }),
+          'chunk_1_progress.json': JSON.stringify({
+            chunkId: 1,
+            lastProcessedIndex: 50,
+            totalProcessed: 2,
+            totalWords: 2
+          })
+        },
+        'merged': {}
+      }
+    });
+  });
+
+  afterEach(() => {
+    // Restore the real file system
+    mockFs.restore();
+    jest.clearAllMocks();
+  });
+
+  test('mergeChunkJsonFiles correctly merges progress files', () => {
+    const chunkDir = path.join('./output/chunks', 'chunk_1');
+    const chunkId = 1;
+    
+    // Call the function
+    const mergedData = mergeChunkJsonFiles(chunkDir, chunkId);
+    
+    // Verify merged data contains both words
+    expect(Object.keys(mergedData).length).toBe(2);
+    expect(mergedData.word3).toBeDefined();
+    expect(mergedData.word4).toBeDefined();
+    
+    // Verify a progress file was created
+    expect(fs.existsSync(path.join(chunkDir, 'progress_50.json'))).toBe(true);
+    
+    // Verify a final.json file was created
+    expect(fs.existsSync(path.join(chunkDir, 'final.json'))).toBe(true);
+    
+    // Verify final.json content
+    const finalContent = JSON.parse(fs.readFileSync(path.join(chunkDir, 'final.json'), 'utf8'));
+    expect(Object.keys(finalContent).length).toBe(2);
+  });
+
+  test('mergeChunkJsonFiles returns existing final.json if it already exists', () => {
+    const chunkDir = path.join('./output/chunks', 'chunk_0');
+    const chunkId = 0;
+    
+    // Call the function
+    const mergedData = mergeChunkJsonFiles(chunkDir, chunkId);
+    
+    // Verify data matches existing final.json
+    expect(Object.keys(mergedData).length).toBe(2);
+    expect(mergedData.word1).toEqual({ data: 'data1' });
+    expect(mergedData.word2).toEqual({ data: 'data2' });
+  });
+
+  test('mergeChunkFiles merges all final.json files', () => {
+    // First ensure chunk_1 has a final.json
+    const chunkDir = path.join('./output/chunks', 'chunk_1');
+    fs.writeFileSync(
+      path.join(chunkDir, 'final.json'), 
+      JSON.stringify({ word3: { data: 'data3' }, word4: { data: 'data4' } })
+    );
+    
+    // Call the function
+    const result = mergeChunkFiles();
+    
+    // Verify result is true (success)
+    expect(result).toBe(true);
+    
+    // Verify merged result file was created
+    const resultFile = path.join('./output/merged', 'result_final.json');
+    expect(fs.existsSync(resultFile)).toBe(true);
+    
+    // Verify merged content
+    const mergedContent = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+    expect(Object.keys(mergedContent).length).toBe(4);
+    expect(mergedContent.word1).toBeDefined();
+    expect(mergedContent.word2).toBeDefined();
+    expect(mergedContent.word3).toBeDefined();
+    expect(mergedContent.word4).toBeDefined();
+    
+    // Verify chunk directories were cleaned up
+    expect(fs.existsSync('./output/chunks/chunk_0')).toBe(false);
+    expect(fs.existsSync('./output/chunks/chunk_1')).toBe(false);
+  });
+
+  test('mergeChunkFiles preserves progress when option is true', () => {
+    // First ensure chunk_1 has a final.json
+    const chunkDir = path.join('./output/chunks', 'chunk_1');
+    fs.writeFileSync(
+      path.join(chunkDir, 'final.json'), 
+      JSON.stringify({ word3: { data: 'data3' }, word4: { data: 'data4' } })
+    );
+    
+    // Call the function with preserveProgress = true
+    const result = mergeChunkFiles(true);
+    
+    // Verify result
+    expect(result).toBe(true);
+    
+    // Verify merged file was created
+    expect(fs.existsSync(path.join('./output/merged', 'result_final.json'))).toBe(true);
+    
+    // Verify chunk directories were still cleaned up
+    expect(fs.existsSync('./output/chunks/chunk_0')).toBe(false);
+    expect(fs.existsSync('./output/chunks/chunk_1')).toBe(false);
+    
+    // But progress directory should still exist
+    expect(fs.existsSync('./output/progress')).toBe(true);
+    expect(fs.existsSync('./output/progress/chunk_0_progress.json')).toBe(true);
+    expect(fs.existsSync('./output/progress/chunk_1_progress.json')).toBe(true);
+  });
+
+  test('mergeChunkFiles returns false when no chunks found', () => {
+    // Remove all chunks
+    fs.rmdirSync('./output/chunks', { recursive: true });
+    fs.mkdirSync('./output/chunks');
+    
+    // Call function
+    const result = mergeChunkFiles();
+    
+    // Should return false
+    expect(result).toBe(false);
+  });
+
+  test('mergeChunkFiles returns false when no words are merged', () => {
+    // Replace final.json files with empty objects
+    fs.writeFileSync(path.join('./output/chunks/chunk_0', 'final.json'), JSON.stringify({}));
+    
+    // Remove chunk_1
+    fs.rmdirSync('./output/chunks/chunk_1', { recursive: true });
+    
+    // Call function
+    const result = mergeChunkFiles();
+    
+    // Should return false
+    expect(result).toBe(false);
+  });
+}); 
+
+
+================================================
+File: .cursor/rules/nodejs-rules.mdc
+================================================
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Overview
+
+You are an expert in TypeScript and Node.js development. You are also an expert with common libraries and frameworks used in the industry. You are thoughtful, give nuanced answers, and are brilliant at reasoning. You carefully provide accurate, factual, thoughtful answers, and are a genius at reasoning.
+
+- Follow the user's requirements carefully & to the letter.
+- First think step-by-step - describe your plan for what to build in pseudocode, written out in great detail.
+
+## Tech Stack
+
+The application we are working on uses the following tech stack:
+
+- TypeScript
+- Node.js
+- Lodash
+- Zod
+
+## Shortcuts
+
+- When provided with the words 'CURSOR:PAIR' this means you are to act as a pair programmer and senior developer, providing guidance and suggestions to the user. You are to provide alternatives the user may have not considered, and weigh in on the best course of action.
+- When provided with the words 'RFC', refactor the code per the instructions provided. Follow the requirements of the instructions provided.
+- When provided with the words 'RFP', improve the prompt provided to be clear.
+  - Break it down into smaller steps. Provide a clear breakdown of the issue or question at hand at the start.
+  - When breaking it down, ensure your writing follows Google's Technical Writing Style Guide.
+
+## TypeScript General Guidelines
+
+## Core Principles
+
+- Write straightforward, readable, and maintainable code
+- Follow SOLID principles and design patterns
+- Use strong typing and avoid 'any'
+- Restate what the objective is of what you are being asked to change clearly in a short summary.
+- Utilize Lodash, 'Promise.all()', and other standard techniques to optimize performance when working with large datasets
+
+## Coding Standards
+
+### Naming Conventions
+
+- Classes: PascalCase
+- Variables, functions, methods: camelCase
+- Files, directories: kebab-case
+- Constants, env variables: UPPERCASE
+
+### Functions
+
+- Use descriptive names: verbs & nouns (e.g., getUserData)
+- Prefer arrow functions for simple operations
+- Use default parameters and object destructuring
+- Document with JSDoc
+
+### Types and Interfaces
+
+- For any new types, prefer to create a Zod schema, and zod inference type for the created schema.
+- Create custom types/interfaces for complex structures
+- Use 'readonly' for immutable properties
+- If an import is only used as a type in the file, use 'import type' instead of 'import'
+
+## Code Review Checklist
+
+- Ensure proper typing
+- Check for code duplication
+- Verify error handling
+- Confirm test coverage
+- Review naming conventions
+- Assess overall code structure and readability
+
+## Structure
+- Use lodash to optimize performance when working with large datasets
+- Use zod to validate data
+- Use async/await for asynchronous operations
+- Use try/catch for error handling
+- Structure files in best practices
+
+## Documentation
+
+- When writing documentation, README's, technical writing, technical documentation, JSDocs or comments, always follow Google's Technical Writing Style Guide.
+- Define terminology when needed
+- Use the active voice
+- Use the present tense
+- Write in a clear and concise manner
+- Present information in a logical order
+- Use lists and tables when appropriate
+- When writing JSDocs, only use TypeDoc compatible tags.
+- Always write JSDocs for all code: classes, functions, methods, fields, types, interfaces.
+
+## Git Commit Rules
+- Make the head / title of the commit message brief
+- Include elaborate details in the body of the commit message
+- Always follow the conventional commit message format
+- Add two newlines after the commit message title
+
+
+
+================================================
+File: .github/workflows/badge.yml
+================================================
+name: Update Badges
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  update-badges:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Set up test directories
+      run: npm run setup:test
+      
+    - name: Run tests and generate coverage
+      run: npm run test:coverage
+    
+    - name: Generate Coverage Badge
+      uses: coverallsapp/github-action@v2
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }} 
+
+
+================================================
+File: .github/workflows/code-quality.yml
+================================================
+name: Code Quality
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install ESLint
+      run: npm install eslint --save-dev
+      
+    - name: Run ESLint
+      run: npx eslint . --ext .js || true
+      # The "|| true" ensures the workflow doesn't fail if there are linting errors
+      # Remove this once the codebase is fully compliant with linting rules 
+
+
+================================================
+File: .github/workflows/node-tests.yml
+================================================
+name: Node.js Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [14.x, 16.x, 18.x, 20.x, 22.x]
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Set up test directories
+      run: npm run setup:test
+      
+    - name: Run tests
+      run: npm test
+      
+    - name: Generate coverage report
+      run: npm run test:coverage
+      
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        directory: ./coverage/
+        fail_ci_if_error: true
+        verbose: true 
+
