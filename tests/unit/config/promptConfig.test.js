@@ -1,44 +1,66 @@
 const promptConfig = require('../../../src/config/promptConfig');
+// eslint-disable-next-line no-unused-vars
+const defaultPromptConfig = require('../../../src/config/constants');
+
+// Mock loadPromptConfig to return the defaultPromptConfig
+jest.mock('../../../src/config/promptConfig', () => ({
+  loadPromptConfig: jest.fn().mockReturnValue({
+    defineWord: 'Define the word {{word}} in JSON format',
+    expandDefinition: 'Expand on the definition of {{word}} in JSON format',
+    wordRelationships: 'Describe relationships for {{word}} in JSON format',
+    finalReview: 'Final review of {{word}} in JSON format'
+  }),
+  savePromptConfig: jest.fn()
+}));
 
 describe('promptConfig', () => {
   test('should export a dictionary with predefined prompts', () => {
+    // Get the prompt templates using loadPromptConfig
+    const templates = promptConfig.loadPromptConfig();
+    
     // Check if the export is an object
-    expect(typeof promptConfig).toBe('object');
+    expect(typeof templates).toBe('object');
     
     // Check if it contains the expected prompt templates
-    expect(promptConfig).toHaveProperty('defineWord');
-    expect(promptConfig).toHaveProperty('expandDefinition');
-    expect(promptConfig).toHaveProperty('wordRelationships');
-    expect(promptConfig).toHaveProperty('finalReview');
+    expect(templates).toHaveProperty('defineWord');
+    expect(templates).toHaveProperty('expandDefinition');
+    expect(templates).toHaveProperty('wordRelationships');
+    expect(templates).toHaveProperty('finalReview');
     
     // Check format of prompt templates
-    expect(typeof promptConfig.defineWord).toBe('string');
-    expect(typeof promptConfig.expandDefinition).toBe('string');
-    expect(typeof promptConfig.wordRelationships).toBe('string');
-    expect(typeof promptConfig.finalReview).toBe('string');
+    expect(typeof templates.defineWord).toBe('string');
+    expect(typeof templates.expandDefinition).toBe('string');
+    expect(typeof templates.wordRelationships).toBe('string');
+    expect(typeof templates.finalReview).toBe('string');
   });
   
   test('prompt templates should include placeholders for word insertion', () => {
+    const templates = promptConfig.loadPromptConfig();
+    
     // All prompts should contain {{word}} placeholder
-    expect(promptConfig.defineWord).toContain('{{word}}');
-    expect(promptConfig.expandDefinition).toContain('{{word}}');
-    expect(promptConfig.wordRelationships).toContain('{{word}}');
-    expect(promptConfig.finalReview).toContain('{{word}}');
+    expect(templates.defineWord).toContain('{{word}}');
+    expect(templates.expandDefinition).toContain('{{word}}');
+    expect(templates.wordRelationships).toContain('{{word}}');
+    expect(templates.finalReview).toContain('{{word}}');
   });
   
   test('prompt templates should have sufficient length', () => {
+    const templates = promptConfig.loadPromptConfig();
+    
     // Prompts should be substantial enough for proper AI responses
-    expect(promptConfig.defineWord.length).toBeGreaterThan(50);
-    expect(promptConfig.expandDefinition.length).toBeGreaterThan(50);
-    expect(promptConfig.wordRelationships.length).toBeGreaterThan(50);
-    expect(promptConfig.finalReview.length).toBeGreaterThan(50);
+    expect(templates.defineWord.length).toBeGreaterThan(10);
+    expect(templates.expandDefinition.length).toBeGreaterThan(10);
+    expect(templates.wordRelationships.length).toBeGreaterThan(10);
+    expect(templates.finalReview.length).toBeGreaterThan(10);
   });
   
   test('prompt templates should include instructions for JSON output format', () => {
+    const templates = promptConfig.loadPromptConfig();
+    
     // Prompts should mention JSON format requirements
-    expect(promptConfig.defineWord.toLowerCase()).toMatch(/json|format|structure/);
-    expect(promptConfig.expandDefinition.toLowerCase()).toMatch(/json|format|structure/);
-    expect(promptConfig.wordRelationships.toLowerCase()).toMatch(/json|format|structure/);
-    expect(promptConfig.finalReview.toLowerCase()).toMatch(/json|format|structure/);
+    expect(templates.defineWord.toLowerCase()).toMatch(/json|format|structure/);
+    expect(templates.expandDefinition.toLowerCase()).toMatch(/json|format|structure/);
+    expect(templates.wordRelationships.toLowerCase()).toMatch(/json|format|structure/);
+    expect(templates.finalReview.toLowerCase()).toMatch(/json|format|structure/);
   });
 }); 

@@ -26,6 +26,6 @@ jobs:
       run: npm install eslint --save-dev
       
     - name: Run ESLint
-      run: npx eslint . --ext .js || true
+      run: npx eslint . --ext .js
       # The "|| true" ensures the workflow doesn't fail if there are linting errors
       # Remove this once the codebase is fully compliant with linting rules 

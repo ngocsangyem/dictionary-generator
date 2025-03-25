@@ -12,14 +12,22 @@ const API_KEY = process.env.GEMINI_API_KEY;
 
 // Main entry point for command line mode
 if (require.main === module) {
-    const args = process.argv.slice(2);
-    const mode = args[0];
-    let startIndex = parseInt(args[1]);
+  const args = process.argv.slice(2);
+  const mode = args[0];
+  let startIndex = parseInt(args[1]);
+  let chunkId;
+  let success;
+  let preserveProgress;
+  let mergeAllSuccess;
+  let completeSuccess;
+  let cleanupSuccess;
+  let totalWords;
+  let batchSize;
 
-    switch (mode) {
-        case 'help':
-            // Display help information
-            console.log(`
+  switch (mode) {
+  case 'help':
+    // Display help information
+    console.log(`
 Dictionary Generation Tool - Usage:
 ----------------------------------
 node index.js [command] [options]
@@ -47,111 +55,111 @@ Examples:
   node index.js cleanup 2    Clean up progress files for chunk 2
   node index.js count        Show total processed words
   node index.js test 500 20  Test processing 20 words starting from index 500`);
-            break;
-        case 'continue':
-            // If no startIndex provided, find the latest processed index
-            if (isNaN(startIndex)) {
-                startIndex = findLatestProcessedIndex();
-            }
-            initParallel(startIndex, true, API_KEY);
-            break;
-        case 'reset':
-            // For reset, use provided index or start from beginning
-            startIndex = isNaN(startIndex) ? 0 : startIndex;
-            initParallel(startIndex, false, API_KEY);
-            break;
-        case 'merge':
-            // Merge mode for manually merging chunk files
-            const chunkId = parseInt(args[1]);
-            if (isNaN(chunkId)) {
-                console.log('Please provide a valid chunk ID for merge mode');
-                console.log('Usage: node index.js merge <chunkId>');
-                process.exit(1);
-            }
-            const success = manualMerge(chunkId);
-            if (!success) {
-                process.exit(1);
-            }
-            break;
-        case 'mergeall':
-            // Merge all chunks
-            const preserveProgress = (args[1] === 'preserve');
-            if (preserveProgress) {
-                console.log('Will preserve progress files after merging');
-            }
-            const mergeAllSuccess = manualMerge(-1, preserveProgress);
-            if (!mergeAllSuccess) {
-                process.exit(1);
-            }
-            break;
-        case 'complete':
-            // Ensure all chunks have final.json files
-            console.log('Ensuring all chunks have final.json files...');
-            const completeSuccess = ensureChunkFinalFiles();
-            if (!completeSuccess) {
-                console.log('Failed to complete all chunks');
-                process.exit(1);
-            }
-            console.log('All chunks completed successfully');
-            break;
-        case 'cleanup':
-            // Clean up progress files
-            if (isNaN(startIndex)) {
-                console.log('Cleaning up progress files for all chunks...');
-                const cleanupSuccess = cleanupAllProgressFiles();
-                if (!cleanupSuccess) {
-                    console.log('Failed to clean up all progress files');
-                    process.exit(1);
-                }
-                console.log('All progress files cleaned up successfully');
-            } else {
-                console.log(`Cleaning up progress files for chunk ${startIndex}...`);
-                const cleanupSuccess = cleanupProgressFiles(startIndex);
-                if (!cleanupSuccess) {
-                    console.log(`Failed to clean up progress files for chunk ${startIndex}`);
-                    process.exit(1);
-                }
-                console.log(`Progress files for chunk ${startIndex} cleaned up successfully`);
-            }
-            break;
-        case 'count':
-            // Count total words across all chunks
-            const totalWords = getTotalWordCount();
-            console.log(`Total words processed across all chunks: ${totalWords}`);
-            break;
-        case 'test':
-            // Test mode for specific index
-            if (isNaN(startIndex)) {
-                console.log('Please provide a valid index for test mode');
-                process.exit(1);
-            }
-            const batchSize = parseInt(args[2]) || null;
-            testSingleBatch(startIndex, batchSize, API_KEY)
-                .then(result => {
-                    console.log('Test result preview:');
-                    console.log(JSON.stringify(result, null, 2));
-                })
-                .catch(error => {
-                    console.error('Test failed:', error);
-                    process.exit(1);
-                });
-            break;
-        default:
-            // Default behavior: start from beginning
-            console.log('No command specified, starting from the beginning...');
-            initParallel(0, true, API_KEY);
-            break;
+    break;
+  case 'continue':
+    // If no startIndex provided, find the latest processed index
+    if (isNaN(startIndex)) {
+      startIndex = findLatestProcessedIndex();
     }
+    initParallel(startIndex, true, API_KEY);
+    break;
+  case 'reset':
+    // For reset, use provided index or start from beginning
+    startIndex = isNaN(startIndex) ? 0 : startIndex;
+    initParallel(startIndex, false, API_KEY);
+    break;
+  case 'merge':
+    // Merge mode for manually merging chunk files
+    chunkId = parseInt(args[1]);
+    if (isNaN(chunkId)) {
+      console.log('Please provide a valid chunk ID for merge mode');
+      console.log('Usage: node index.js merge <chunkId>');
+      process.exit(1);
+    }
+    success = manualMerge(chunkId);
+    if (!success) {
+      process.exit(1);
+    }
+    break;
+  case 'mergeall':
+    // Merge all chunks
+    preserveProgress = (args[1] === 'preserve');
+    if (preserveProgress) {
+      console.log('Will preserve progress files after merging');
+    }
+    mergeAllSuccess = manualMerge(-1, preserveProgress);
+    if (!mergeAllSuccess) {
+      process.exit(1);
+    }
+    break;
+  case 'complete':
+    // Ensure all chunks have final.json files
+    console.log('Ensuring all chunks have final.json files...');
+    completeSuccess = ensureChunkFinalFiles();
+    if (!completeSuccess) {
+      console.log('Failed to complete all chunks');
+      process.exit(1);
+    }
+    console.log('All chunks completed successfully');
+    break;
+  case 'cleanup':
+    // Clean up progress files
+    if (isNaN(startIndex)) {
+      console.log('Cleaning up progress files for all chunks...');
+      cleanupSuccess = cleanupAllProgressFiles();
+      if (!cleanupSuccess) {
+        console.log('Failed to clean up all progress files');
+        process.exit(1);
+      }
+      console.log('All progress files cleaned up successfully');
+    } else {
+      console.log(`Cleaning up progress files for chunk ${startIndex}...`);
+      cleanupSuccess = cleanupProgressFiles(startIndex);
+      if (!cleanupSuccess) {
+        console.log(`Failed to clean up progress files for chunk ${startIndex}`);
+        process.exit(1);
+      }
+      console.log(`Progress files for chunk ${startIndex} cleaned up successfully`);
+    }
+    break;
+  case 'count':
+    // Count total words across all chunks
+    totalWords = getTotalWordCount();
+    console.log(`Total words processed across all chunks: ${totalWords}`);
+    break;
+  case 'test':
+    // Test mode for specific index
+    if (isNaN(startIndex)) {
+      console.log('Please provide a valid index for test mode');
+      process.exit(1);
+    }
+    batchSize = parseInt(args[2]) || null;
+    testSingleBatch(startIndex, batchSize, API_KEY)
+      .then(result => {
+        console.log('Test result preview:');
+        console.log(JSON.stringify(result, null, 2));
+      })
+      .catch(error => {
+        console.error('Test failed:', error);
+        process.exit(1);
+      });
+    break;
+  default:
+    // Default behavior: start from beginning
+    console.log('No command specified, starting from the beginning...');
+    initParallel(0, true, API_KEY);
+    break;
+  }
 }
 
 // Export the public API
 module.exports = {
-    initParallel,
-    mergeChunkFiles,
-    getPromptConfig: loadPromptConfig,
-    testSingleBatch,
-    mergeChunkJsonFiles: require('./src/utils/mergeUtils').mergeChunkJsonFiles,
-    ensureChunkFinalFiles,
-    cleanupProgressFiles,
-    cleanupAllProgressFiles
+  initParallel,
+  mergeChunkFiles,
+  getPromptConfig: loadPromptConfig,
+  testSingleBatch,
+  mergeChunkJsonFiles: require('./src/utils/mergeUtils').mergeChunkJsonFiles,
+  ensureChunkFinalFiles,
+  cleanupProgressFiles,
+  cleanupAllProgressFiles
 };

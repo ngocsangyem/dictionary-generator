@@ -1,12 +1,11 @@
 const fs = require('fs');
-const path = require('path');
 const mockFs = require('mock-fs');
 const manualMerge = require('../../../src/core/manualMerge');
 
 // Mock dependencies
 jest.mock('../../../src/utils/mergeUtils', () => ({
   mergeChunkFiles: jest.fn().mockReturnValue(true),
-  mergeChunkJsonFiles: jest.fn().mockImplementation((chunkDir, chunkId) => {
+  mergeChunkJsonFiles: jest.fn().mockImplementation((_chunkDir, _chunkId) => {
     return { word1: {}, word2: {} };
   })
 }));

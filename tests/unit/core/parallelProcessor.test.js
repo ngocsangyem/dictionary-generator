@@ -1,6 +1,7 @@
 const fs = require('fs');
-const path = require('path');
 const mockFs = require('mock-fs');
+// Worker is only being imported for type hints, add a comment to explain this
+// eslint-disable-next-line no-unused-vars
 const { Worker } = require('worker_threads');
 const { ensureChunkFinalFiles } = require('../../../src/core/parallelProcessor');
 
@@ -14,7 +15,7 @@ jest.mock('worker_threads', () => ({
 
 jest.mock('../../../src/utils/mergeUtils', () => ({
   mergeChunkFiles: jest.fn().mockReturnValue(true),
-  mergeChunkJsonFiles: jest.fn().mockImplementation((chunkDir, chunkId) => {
+  mergeChunkJsonFiles: jest.fn().mockImplementation((_chunkDir, _chunkId) => {
     return { word1: {}, word2: {} };
   })
 }));
