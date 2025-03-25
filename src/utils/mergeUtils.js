@@ -5,8 +5,10 @@ const { cleanupProgressFiles, saveChunkProgress } = require('./fileUtils');
 
 /**
  * Merge all final.json files from each chunk into a single result file
+ * @param {boolean} preserveProgress - Whether to preserve progress files after merging
+ * @returns {boolean} - Success status
  */
-function mergeChunkFiles() {
+function mergeChunkFiles(preserveProgress = false) {
     const mergedData = {};
     const successfulChunks = [];
 
@@ -79,13 +81,15 @@ function mergeChunkFiles() {
     }
     
     // Clean up the progress directory as well
-    if (fs.existsSync(DIRECTORIES.PROGRESS)) {
+    if (!preserveProgress && fs.existsSync(DIRECTORIES.PROGRESS)) {
         try {
             fs.rmSync(DIRECTORIES.PROGRESS, { recursive: true, force: true });
             console.log('Cleaned up progress directory');
         } catch (error) {
             console.warn(`Warning: Could not delete progress directory: ${error.message}`);
         }
+    } else if (preserveProgress) {
+        console.log('Preserving progress directory as requested');
     }
     
     return true;

@@ -182,10 +182,10 @@ node index.js count
 ```
 
 - Shows the total number of words processed across all chunks
-- Calculates the sum by:
-  - Reading all progress files in `./chunks/progress/`
-  - Adding up the `totalProcessed` count from each chunk
-  - Verifying actual word counts from merged data
+- Calculates the sum by checking these sources in order:
+  1. Progress files in `./output/progress/` directory
+  2. The merged result file in `./output/merged/result_final.json`
+  3. Individual `final.json` files in chunk directories
 
 ### Test Processing
 
@@ -196,13 +196,56 @@ node index.js test <startIndex> [batchSize]
 - Tests processing on a single batch of words
 - `startIndex`: Required, specifies where to start
 - `batchSize`: Optional, defaults to 28 words
-- Saves results in `./test_results/`
+- Saves results in `./tests/results/`
+
+## Output Files and Directories
+
+All processing results and intermediate files are stored in the `./output/` directory:
+
+```
+output/
+├── chunks/             # Individual chunk processing directories
+│   ├── chunk_0/        # Chunk 0 processing directory
+│   │   ├── progress_*.json  # Intermediate progress files
+│   │   └── final.json  # Final merged result for this chunk
+│   ├── chunk_1/        # Chunk 1 processing directory
+│   │   └── ...
+│   └── ...
+├── progress/           # Progress tracking information
+│   ├── chunk_0_progress.json
+│   ├── chunk_1_progress.json
+│   └── ...
+└── merged/             # Final merged results
+    └── result_final.json  # Complete dictionary with all processed words
+```
+
+### Key Files:
+
+1. **Progress Files** (`./output/chunks/chunk_N/progress_*.json`):
+   - Intermediate result files created during processing
+   - Each contains processed words up to a certain index
+   - Used for recovery if processing is interrupted
+
+2. **Chunk Final Files** (`./output/chunks/chunk_N/final.json`):
+   - Complete results for a specific chunk
+   - Created when a chunk finishes processing or when using the `complete` command
+   - Used as input for the final merge
+
+3. **Progress Tracking** (`./output/progress/chunk_N_progress.json`):
+   - Contains metadata about processing status
+   - Includes information like last processed index, processing speed, etc.
+   - Used for resuming interrupted processing
+
+4. **Final Result** (`./output/merged/result_final.json`):
+   - The complete merged dictionary
+   - Contains all successfully processed words
+   - This is the main output file you'll want to use
 
 ## Progress Tracking
 
 The tool maintains detailed progress information:
 
-- Each chunk has its own progress file in `./chunks/progress/`
+- Each chunk has its own progress file in `./output/progress/`
 - Progress files contain:
   - Last processed index
   - Total words processed
@@ -213,7 +256,7 @@ The tool maintains detailed progress information:
 ## Managing Long-Running Processes
 
 1. **Monitoring Progress**
-   - Check progress files in `./chunks/progress/`
+   - Check progress files in `./output/progress/`
    - Use `node index.js count` to see total processed words
    - Monitor log files in `./logs/` directory
 
@@ -224,14 +267,14 @@ The tool maintains detailed progress information:
 
 3. **Merging Results**
    - Periodically merge chunk results using `node index.js merge <chunkId>`
-   - Final results are saved in `./merged/result_final.json`
+   - Final results are saved in `./output/merged/result_final.json`
    - Progress is preserved and updated after merging
 
 4. **Recovery from Failures**
    - Each chunk saves progress independently
    - Failed chunks can be reprocessed separately
    - Use `node index.js complete` to ensure all chunks have final files
-   - Use `node index.js mergeall` to recover and merge all chunks
+   - Use `node index.js mergeall preserve` to merge all chunks while preserving progress data
    - Use merge command to consolidate partial results
 
 ## Improved Error Handling
@@ -251,6 +294,7 @@ The tool includes robust error handling mechanisms:
 3. **Recovery Commands**
    - `complete`: Creates final.json files from progress files
    - `mergeall`: Merges all progress across all chunks
+   - `mergeall preserve`: Merges while preserving progress information
    - `cleanup`: Removes temporary files after successful merging
 
 4. **Progress Preservation**
@@ -354,12 +398,12 @@ If processing is interrupted, you can resume by:
 
 1. Check progress of chunks:
 ```bash
-ls -l ./chunks/progress/
+ls -l ./output/progress/
 ```
 
 2. View specific chunk progress:
 ```bash
-cat ./chunks/progress/chunk_0_progress.json
+cat ./output/progress/chunk_0_progress.json
 ```
 
 3. Resume processing:
@@ -432,12 +476,16 @@ When running `node index.js continue`:
 
 3. **Progress Monitoring**:
    - Each worker logs its progress independently
-   - Progress files show exact position in each chunk
-   - Logs contain detailed processing information
+   - Progress files in `./output/progress/` show exact position in each chunk
+   - Progress files in `./output/chunks/chunk_N/` contain intermediate results
+   - Logs in `./logs/` contain detailed processing information
    - Real-time progress updates in console
 
 ### Recovery from Failures
-- If a worker fails, it saves partial results
-- Other workers continue processing their chunks
+- If a worker fails, it saves partial results in its chunk directory
+- Other workers continue processing their chunks independently
 - Resume the failed chunk by running with its last saved index
 - Merged results combine successful outputs from all chunks 
+- Use `node index.js complete` to create final.json files from progress
+- Use `node index.js mergeall preserve` to recover and merge while preserving progress
+- Final merged dictionary is available at `./output/merged/result_final.json` 

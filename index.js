@@ -28,7 +28,8 @@ Commands:
   continue [startIndex]  Continue processing from the latest index or specified index
   reset [startIndex]     Reset and start processing from beginning or specified index
   merge <chunkId>        Manually merge files for a specific chunk
-  mergeall               Manually merge all chunks, useful for recovery
+  mergeall [preserve]    Manually merge all chunks, useful for recovery
+                         Add 'preserve' to keep progress files for word counting
   complete               Ensure all chunks have final.json files using progress files
   cleanup [chunkId]      Clean up progress files (for all chunks or specific chunk)
   count                  Display total processed word count across all chunks
@@ -40,6 +41,7 @@ Examples:
   node index.js reset 100    Start processing from index 100
   node index.js merge 2      Merge all files for chunk 2
   node index.js mergeall     Merge all chunks using progress files
+  node index.js mergeall preserve  Merge all chunks but preserve progress files
   node index.js complete     Ensure all chunks have final.json files
   node index.js cleanup      Clean up all progress files
   node index.js cleanup 2    Clean up progress files for chunk 2
@@ -73,7 +75,11 @@ Examples:
             break;
         case 'mergeall':
             // Merge all chunks
-            const mergeAllSuccess = manualMerge(-1);
+            const preserveProgress = (args[1] === 'preserve');
+            if (preserveProgress) {
+                console.log('Will preserve progress files after merging');
+            }
+            const mergeAllSuccess = manualMerge(-1, preserveProgress);
             if (!mergeAllSuccess) {
                 process.exit(1);
             }

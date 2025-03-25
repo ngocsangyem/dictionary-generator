@@ -128,31 +128,77 @@ function findLatestProcessedIndex() {
 }
 
 /**
- * Get total word count from all chunk progress files
+ * Get total word count from all chunk progress files or merged result
  */
 function getTotalWordCount() {
-    if (!fs.existsSync(DIRECTORIES.PROGRESS)) {
-        return 0;
+    let totalWords = 0;
+    
+    // First try to get count from progress files
+    if (fs.existsSync(DIRECTORIES.PROGRESS)) {
+        try {
+            // Read all progress files
+            const progressFiles = fs.readdirSync(DIRECTORIES.PROGRESS)
+                .filter(file => file.startsWith('chunk_') && file.endsWith('_progress.json'));
+
+            if (progressFiles.length > 0) {
+                // Sum up total words from all chunks
+                totalWords = progressFiles.reduce((sum, file) => {
+                    const progressData = JSON.parse(
+                        fs.readFileSync(path.join(DIRECTORIES.PROGRESS, file), 'utf8')
+                    );
+                    return sum + (progressData.totalProcessed || 0);
+                }, 0);
+                
+                console.log(`Found ${totalWords} words from progress files`);
+                return totalWords;
+            }
+        } catch (error) {
+            console.warn('Error reading progress files:', error.message);
+        }
     }
-
-    try {
-        // Read all progress files
-        const progressFiles = fs.readdirSync(DIRECTORIES.PROGRESS)
-            .filter(file => file.startsWith('chunk_') && file.endsWith('_progress.json'));
-
-        // Sum up total words from all chunks
-        const totalWords = progressFiles.reduce((sum, file) => {
-            const progressData = JSON.parse(
-                fs.readFileSync(path.join(DIRECTORIES.PROGRESS, file), 'utf8')
-            );
-            return sum + (progressData.totalProcessed || 0);
-        }, 0);
-
-        return totalWords;
-    } catch (error) {
-        console.warn('Error reading progress files:', error.message);
-        return 0;
+    
+    // If no progress files or error reading them, check merged result
+    const mergedFile = path.join(DIRECTORIES.MERGED, 'result_final.json');
+    if (fs.existsSync(mergedFile)) {
+        try {
+            const mergedData = JSON.parse(fs.readFileSync(mergedFile, 'utf8'));
+            totalWords = Object.keys(mergedData).length;
+            console.log(`Found ${totalWords} words from merged result file`);
+            return totalWords;
+        } catch (error) {
+            console.warn('Error reading merged result file:', error.message);
+        }
     }
+    
+    // If neither progress files nor merged result available, check chunk directories
+    if (fs.existsSync(DIRECTORIES.CHUNKS)) {
+        try {
+            const chunkDirs = fs.readdirSync(DIRECTORIES.CHUNKS)
+                .filter(dir => dir.startsWith('chunk_'));
+                
+            for (const chunkDir of chunkDirs) {
+                const finalFile = path.join(DIRECTORIES.CHUNKS, chunkDir, 'final.json');
+                if (fs.existsSync(finalFile)) {
+                    try {
+                        const chunkData = JSON.parse(fs.readFileSync(finalFile, 'utf8'));
+                        totalWords += Object.keys(chunkData).length;
+                    } catch (error) {
+                        console.warn(`Error reading ${finalFile}:`, error.message);
+                    }
+                }
+            }
+            
+            if (totalWords > 0) {
+                console.log(`Found ${totalWords} words from chunk final.json files`);
+                return totalWords;
+            }
+        } catch (error) {
+            console.warn('Error reading chunk directories:', error.message);
+        }
+    }
+    
+    console.log('No word count information found');
+    return 0;
 }
 
 /**

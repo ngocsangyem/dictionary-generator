@@ -7,9 +7,10 @@ const ProgressTracker = require('../utils/ProgressTracker');
 
 /**
  * Manually create final.json for all chunks and merge them
+ * @param {boolean} preserveProgress - Whether to preserve progress files after merging
  * @returns {boolean} - Success status
  */
-function mergeAllChunks() {
+function mergeAllChunks(preserveProgress = true) {
     try {
         console.log('Merging all chunks...');
         
@@ -78,7 +79,8 @@ function mergeAllChunks() {
         }
         
         // Finally, merge all final.json files into the result
-        mergeChunkFiles();
+        // Preserve progress files for word count
+        mergeChunkFiles(preserveProgress);
         console.log('All chunks merged successfully');
         
         return true;
@@ -91,9 +93,10 @@ function mergeAllChunks() {
 /**
  * Manually merge JSON files for a specific chunk
  * @param {number} chunkId - ID of the chunk to merge (-1 for all chunks)
+ * @param {boolean} preserveProgress - Whether to preserve progress files after merging
  * @returns {boolean} - Success status
  */
-function manualMerge(chunkId) {
+function manualMerge(chunkId, preserveProgress = true) {
     try {
         // Set up a signal handler for graceful shutdown
         let isShuttingDown = false;
@@ -115,7 +118,7 @@ function manualMerge(chunkId) {
             // Try to finalize any ongoing processes
             if (chunkId === -1) {
                 console.log('Attempting to save any progress made...');
-                mergeChunkFiles();
+                mergeChunkFiles(preserveProgress);
             }
             
             // Exit gracefully
@@ -131,7 +134,7 @@ function manualMerge(chunkId) {
         
         // Special case: merge all chunks
         if (chunkId === -1) {
-            const result = mergeAllChunks();
+            const result = mergeAllChunks(preserveProgress);
             
             // Restore original handler if it existed
             if (originalHandler) {
