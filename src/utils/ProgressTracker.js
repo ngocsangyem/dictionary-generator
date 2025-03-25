@@ -173,6 +173,21 @@ class ProgressTracker extends EventEmitter {
       return `${hours}h ${minutes}m ${secs}s`;
     }
   }
+
+  /**
+   * Get current progress information
+   * @returns {Object} - Current progress information
+   */
+  getProgress() {
+    return {
+      processedWords: this.processedWords,
+      totalWords: this.total,
+      progressPercent: this._calculatePercentage(),
+      elapsedTime: this._formatTime((Date.now() - this._startTimeMs) / 1000),
+      estimatedRemainingTime: this._formatTime(this._calculateRemainingTime()),
+      currentSpeed: this._calculateSpeed()
+    };
+  }
 }
 
 module.exports = ProgressTracker; 
