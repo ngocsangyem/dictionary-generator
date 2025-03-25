@@ -5,6 +5,19 @@ All notable changes to the Dictionary Generation Tool will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2025-04-01
+
+### Fixed
+- Added validation check to ensure API responses include the `en_def` field for all definitions
+- Enhanced validation logic to verify complete definition structure with all required fields
+- Fixed issue where incomplete definitions were being accepted without required fields
+
+## [1.3.2] - 2025-04-01
+
+### Added
+- Emphasized the `en_def` field in the schema to ensure all dictionary entries include English definitions
+- Enhanced prompt instructions to prioritize English definitions along with translations
+
 ## [1.3.1] - 2025-04-01
 
 ### Changed

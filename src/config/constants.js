@@ -96,7 +96,7 @@ const dataExample = `
 // Default prompt configuration
 const defaultPromptConfig = {
   task: "dictionary_generation",
-  version: "1.3.1",
+  version: "1.3.3",
   schema: {
     Meaning: {
       speech_part: "string",
@@ -122,7 +122,7 @@ const defaultPromptConfig = {
     highlighting: "Highlight the target word in examples using **word**, including inflected forms",
     empty_arrays: "Leave empty arrays for missing synonyms/antonyms",
     phonetics: "Include both US and UK pronunciations when available",
-    en_def: "Make sure include an English definition for each meaning",
+    en_def: "Make sure to include a clear and comprehensive English definition for each meaning",
     tran: "Make sure include a Vietnamese translation for each meaning"
   },
   // eslint-disable-next-line camelcase
@@ -131,9 +131,9 @@ const defaultPromptConfig = {
 - An array of meanings, where each meaning corresponds to a different part of speech (e.g., noun, verb, adjective). Each meaning should include:
   - The part of speech
   - An array of definitions, each containing:
-    - An English definition (\`en_def\`)
+    - A detailed English definition (\`en_def\`) that clearly explains the meaning
     - A Vietnamese translation of the definition (\`tran\`)
-    - At least two example sentences that use the word in context, with the word highlighted using **word** (or its inflected form, e.g., **goes**) for markdown rendering
+    - At least three example sentences that use the word in context, with the word highlighted using **word** (or its inflected form, e.g., **goes**) for markdown rendering
     - An array of synonyms relevant to this definition (if any, otherwise an empty array)
     - An array of antonyms relevant to this definition (if any, otherwise an empty array)
 - An array of phonetics, including:
@@ -141,6 +141,11 @@ const defaultPromptConfig = {
   - One entry for UK pronunciation with "type": "UK" and "ipa": [IPA string]
 
 The JSON structure should be an object where each key is a word from the list, and the value is an object containing "meanings" and "phonetics" as described.
+
+**Important:**
+- Always provide a detailed \`en_def\` that accurately reflects the meaning of the word in that context
+- Ensure each definition has both \`en_def\` and \`tran\` fields
+- The English definition should be comprehensive and suitable for IELTS students
 
 **Example for the word "go":**
 
@@ -153,6 +158,7 @@ The words to be defined are: {words}.
 - The JSON object starts with { and ends with }.
 - All words are included with their full data (meanings, phonetics, etc.).
 - No information is truncated.
+- Every definition MUST include a detailed English definition (en_def) and translation (tran).
 - Follow the structure and instructions provided previously.
 
 The words to be defined are: {words}.`
