@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const { DIRECTORIES } = require('../config/constants');
-const { cleanupProgressFiles, saveChunkProgress } = require('./fileUtils');
 
 /**
  * Merge all final.json files from each chunk into a single result file

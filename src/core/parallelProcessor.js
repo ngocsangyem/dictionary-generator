@@ -2,7 +2,7 @@ const { Worker } = require('worker_threads');
 const path = require('path');
 const fs = require('fs');
 const { NUM_WORKERS, DIRECTORIES } = require('../config/constants');
-const { createDirectories, readWordsList, cleanupProgressFiles } = require('../utils/fileUtils');
+const { createDirectories, readWordsList } = require('../utils/fileUtils');
 const { loadPromptConfig, savePromptConfig } = require('../config/promptConfig');
 const { mergeChunkFiles, mergeChunkJsonFiles } = require('../utils/mergeUtils');
 
