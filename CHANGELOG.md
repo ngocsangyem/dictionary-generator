@@ -5,6 +5,17 @@ All notable changes to the Dictionary Generation Tool will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-04-01
+
+### Added
+- Added `getProgress()` method to ProgressTracker class to fix "tracker.getProgress is not a function" error
+
+### Changed
+- Improved prompt template for better dictionary generation results
+- Enhanced prompt instructions for more accurate word definitions
+- Updated example format in prompt to improve result consistency
+- Fixed inconsistencies in prompt configuration
+
 ## [1.2.0] - 2025-03-30
 
 ### Added

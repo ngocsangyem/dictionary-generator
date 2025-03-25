@@ -29,70 +29,130 @@ const DELAY_CONFIG = {
   MAX_RETRIES: 7               // Increase max retries
 };
 
+const dataExample = `${
+  ```json
+{
+  "go": {
+    "word": "go",
+    "meanings": [
+      {
+        "speech_part": "verb",
+        "defs": [
+          {
+            "tran": "di chuyển từ nơi này đến nơi khác",
+            "en_def": "to move from one place to another",
+            "examples": [
+              "I **go** to school every day.",
+              "They **go** to the park on weekends.",
+              "She **goes** to work by bus."
+            ],
+            "synonyms": ["travel", "move"],
+            "antonyms": ["stay", "remain"]
+          },
+          {
+            "tran": "trở nên, trở thành",
+            "en_def": "to become",
+            "examples": [
+              "The milk **went** bad.",
+              "He **went** crazy after the accident.",
+              "The lights **went** out."
+            ],
+            "synonyms": ["become", "turn"],
+            "antonyms": []
+          }
+        ]
+      },
+      {
+        "speech_part": "noun",
+        "defs": [
+          {
+            "tran": "lượt, lần thử",
+            "en_def": "a turn or attempt",
+            "examples": [
+              "It's your **go** now.",
+              "He had a **go** at solving the puzzle.",
+              "She took a **go** on the swing."
+            ],
+            "synonyms": ["turn", "attempt"],
+            "antonyms": []
+          }
+        ]
+      }
+    ],
+    "phonetics": [
+      {
+        "type": "US",
+        "ipa": "/ɡoʊ/"
+      },
+      {
+        "type": "UK",
+        "ipa": "/ɡəʊ/"
+      }
+    ]
+  }
+}
+```
+}`
+
 // Default prompt configuration
 const defaultPromptConfig = {
-  task: 'dictionary_generation',
-  version: '1.0',
+  task: "dictionary_generation",
+  version: "1.3.0",
   schema: {
     Meaning: {
-      // eslint-disable-next-line camelcase
-      speech_part: 'string',
+      speech_part: "string",
       defs: {
-        tran: 'string',
-        examples: 'string[]',
-        synonyms: 'string[]',
-        antonyms: 'string[]'
+        tran: "string",
+        en_def: "string",
+        examples: "string[]",
+        synonyms: "string[]",
+        antonyms: "string[]"
       }
     },
     Word: {
-      word: 'string',
-      meanings: 'Meaning[]',
+      word: "string",
+      meanings: "Meaning[]",
       phonetics: {
-        type: 'string',
-        ipa: 'string'
+        type: "string",
+        ipa: "string"
       }
     }
   },
   instructions: {
-    examples: 'More than two examples per definition',
-    highlighting: 'Use **word** format in examples',
-    // eslint-disable-next-line camelcase
-    empty_arrays: 'Leave empty arrays for missing synonyms/antonyms'
+    examples: "At least three examples per definition",
+    highlighting: "Highlight the target word in examples using **word**, including inflected forms",
+    empty_arrays: "Leave empty arrays for missing synonyms/antonyms",
+    phonetics: "Include both US and UK pronunciations when available"
   },
   // eslint-disable-next-line camelcase
-  prompt_template: `Create a comprehensive dictionary in JSON format, detailing the words provided. For each word, include its full part of speech (e.g., adjective, verb, noun, word form), IPA pronunciation (both US and UK), and a set of meanings. Each meaning should have a Vietnamese translation and example sentences. The JSON structure should adhere to the following schema:
-interface Meaning {
-    speech_part: string;
-    defs: {
-        tran: string;
-        examples: string[]; // More than two examples
-       synonyms: string[];
-       antonyms: string[]
-    }[];
-}
+  prompt_template: `Act as an English teacher preparing materials for IELTS students. Create a comprehensive dictionary in JSON format for the given list of words. For each word, include:
 
-interface Word {
-    [key: string]: {
-        word: string;
-        meanings: Meaning[];
-        phonetics: {
-           type: string;
-           ipa: string;
-      }[];
-    };
-}
+- An array of meanings, where each meaning corresponds to a different part of speech (e.g., noun, verb, adjective). Each meaning should include:
+  - The part of speech
+  - An array of definitions, each containing:
+    - A Vietnamese translation of the definition
+    - A English definition
+    - At least two example sentences that use the word in context, with the word highlighted using **word** (or its inflected form, e.g., **goes**) for markdown rendering
+    - An array of synonyms relevant to this definition (if any, otherwise an empty array)
+    - An array of antonyms relevant to this definition (if any, otherwise an empty array)
+- An array of phonetics, including:
+  - One entry for US pronunciation with "type": "US" and "ipa": [IPA string]
+  - One entry for UK pronunciation with "type": "UK" and "ipa": [IPA string]
 
-Note: If can not find any antonyms or synonyms, just leave it empty array. In each example sentence, you should use the word in context (definition and speech part), and highlight the word in **word** to render it in markdown. Ex: **go** is a noun.
+The JSON structure should be an object where each key is a word from the list, and the value is an object containing "meanings" and "phonetics" as described.
 
-IMPORTANT: Please ensure your response is a complete, valid JSON object. Do not truncate or cut off the response. The response should start with { and end with }. Include all words in the list with their complete data.
+**Example for the word "go":**
 
-The words to be defined are: {words}.`,
+${dataExample}
+
+The words to be defined are: {words}.
+`,
   // eslint-disable-next-line camelcase
-  retry_prompt_template: `I notice the previous response was incomplete. Please provide a complete JSON response for the following words. Make sure to:
-1. Start with { and end with }
-2. Include all words in the list
-3. Provide complete data for each word
-4. Do not truncate the response
+  retry_prompt_template: `The previous response was incomplete. Please provide a complete JSON response for all words in the list. Ensure that:
+- The JSON object starts with { and ends with }.
+- All words are included with their full data (meanings, phonetics, etc.).
+- No information is truncated.
+- Follow the structure and instructions provided previously.
 
 The words to be defined are: {words}.`
 };
