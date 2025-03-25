@@ -5,6 +5,26 @@ All notable changes to the Dictionary Generation Tool will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-03-30
+
+### Added
+- CI/CD integration with GitHub Actions
+  - Automated test workflows for Node.js 14.x, 16.x, and 18.x
+  - Code quality checks with ESLint
+  - Code coverage reporting with Coveralls
+  - Status badges in README
+- Comprehensive unit tests for all major modules
+- ESLint configuration for standardized code style
+- New npm scripts:
+  - `lint`: Run ESLint to check code quality
+  - `lint:fix`: Automatically fix ESLint issues
+  - `test:coverage`: Generate coverage reports in lcov format
+
+### Changed
+- Updated test coverage configuration to include lcov reports
+- Enhanced documentation with testing information and badges
+- Package.json updates to support CI/CD workflows
+
 ## [1.1.0] - 2025-03-25
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "dictionary-generator",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Parallel dictionary generator using Gemini API",
   "main": "index.js",
   "scripts": {
@@ -11,6 +11,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
     "setup:test": "mkdir -p tests/unit/utils tests/unit/core tests/unit/config",
     "merge": "node index.js merge",
     "mergeall": "node index.js mergeall",
@@ -31,6 +33,7 @@
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
+    "eslint": "^8.42.0",
     "jest": "^29.7.0",
     "mock-fs": "^5.2.0"
   },
@@ -44,6 +47,8 @@
     ],
     "testMatch": [
       "**/tests/**/*.test.js"
-    ]
+    ],
+    "collectCoverage": true,
+    "coverageReporters": ["text", "lcov"]
   }
 }

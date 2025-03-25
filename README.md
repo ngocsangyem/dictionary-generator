@@ -1,5 +1,9 @@
 # Dictionary Generation Tool
 
+![Node.js Tests](https://github.com/USERNAME/REPO_NAME/workflows/Node.js%20Tests/badge.svg)
+![Code Quality](https://github.com/USERNAME/REPO_NAME/workflows/Code%20Quality/badge.svg)
+[![Coverage Status](https://coveralls.io/repos/github/USERNAME/REPO_NAME/badge.svg?branch=main)](https://coveralls.io/github/USERNAME/REPO_NAME?branch=main)
+
 A parallel processing tool for generating dictionary entries using Google's Gemini AI API.
 
 ## Features
