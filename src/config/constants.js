@@ -29,8 +29,8 @@ const DELAY_CONFIG = {
   MAX_RETRIES: 7               // Increase max retries
 };
 
-const dataExample = `${
-  ```json
+const dataExample = `
+  \`\`\`json
 {
   "go": {
     "word": "go",
@@ -91,8 +91,7 @@ const dataExample = `${
     ]
   }
 }
-```
-}`
+\`\`\``
 
 // Default prompt configuration
 const defaultPromptConfig = {

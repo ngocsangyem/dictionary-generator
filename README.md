@@ -370,6 +370,7 @@ The dictionary entries follow this JSON structure:
         "word": string,
         "meanings": [{
             "speech_part": string,
+            "en_def": string,
             "defs": {
                 "tran": string,
                 "examples": string[],
