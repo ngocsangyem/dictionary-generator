@@ -501,3 +501,55 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes, including:
 ## License
 
 MIT 
+
+## Testing
+
+The application includes a comprehensive test suite built with Jest. The tests cover utility functions, core processing logic, and configuration modules.
+
+### Running Tests
+
+To run the tests, use the following commands:
+
+```bash
+# Set up test directories (if they don't exist)
+npm run setup:test
+
+# Run all tests
+npm test
+
+# Run tests in watch mode during development
+npm run test:watch
+
+# Generate test coverage report
+npm run test:coverage
+```
+
+The test suite includes unit tests for:
+- File utilities (`fileUtils.js`)
+- Merge utilities (`mergeUtils.js`)
+- Parallel processor (`parallelProcessor.js`)
+- Manual merge functionality (`manualMerge.js`)
+- Progress tracker (`ProgressTracker.js`)
+- Prompt configuration (`promptConfig.js`)
+
+### Test Structure
+
+Tests are organized in a directory structure that mirrors the source code:
+
+```
+tests/
+  └── unit/
+      ├── utils/
+      │   ├── fileUtils.test.js
+      │   ├── mergeUtils.test.js
+      │   └── ProgressTracker.test.js
+      ├── core/
+      │   ├── parallelProcessor.test.js
+      │   └── manualMerge.test.js
+      └── config/
+          └── promptConfig.test.js
+```
+
+### Mocking
+
+The tests use mock-fs to simulate the file system without making actual file system changes during test execution. 

@@ -8,10 +8,13 @@
     "continue": "node index.js continue",
     "reset": "node index.js reset",
     "count": "node index.js count",
-    "test": "node index.js test",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "setup:test": "mkdir -p tests/unit/utils tests/unit/core tests/unit/config",
     "merge": "node index.js merge",
     "mergeall": "node index.js mergeall",
-    "mergeall:preserve": "node index.js mergeall preserve",
+    "mergeall:preserve": "node index.js mergeall --preserve",
     "complete": "node index.js complete",
     "cleanup": "node index.js cleanup"
   },
@@ -27,7 +30,20 @@
     "@google/generative-ai": "^0.1.3",
     "dotenv": "^16.3.1"
   },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "mock-fs": "^5.2.0"
+  },
   "engines": {
     "node": ">=14.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coveragePathIgnorePatterns": [
+      "/node_modules/"
+    ],
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ]
   }
 }
