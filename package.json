@@ -1,6 +1,6 @@
 {
   "name": "dictionary-generator",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Parallel dictionary generator using Gemini API",
   "main": "index.js",
   "scripts": {

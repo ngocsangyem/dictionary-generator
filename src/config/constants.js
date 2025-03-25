@@ -39,8 +39,8 @@ const dataExample = `
         "speech_part": "verb",
         "defs": [
           {
-            "tran": "di chuyển từ nơi này đến nơi khác",
             "en_def": "to move from one place to another",
+            "tran": "di chuyển từ nơi này đến nơi khác",
             "examples": [
               "I **go** to school every day.",
               "They **go** to the park on weekends.",
@@ -50,8 +50,8 @@ const dataExample = `
             "antonyms": ["stay", "remain"]
           },
           {
-            "tran": "trở nên, trở thành",
             "en_def": "to become",
+            "tran": "trở nên, trở thành",
             "examples": [
               "The milk **went** bad.",
               "He **went** crazy after the accident.",
@@ -66,8 +66,8 @@ const dataExample = `
         "speech_part": "noun",
         "defs": [
           {
-            "tran": "lượt, lần thử",
             "en_def": "a turn or attempt",
+            "tran": "lượt, lần thử",
             "examples": [
               "It's your **go** now.",
               "He had a **go** at solving the puzzle.",
@@ -96,7 +96,7 @@ const dataExample = `
 // Default prompt configuration
 const defaultPromptConfig = {
   task: "dictionary_generation",
-  version: "1.3.0",
+  version: "1.3.1",
   schema: {
     Meaning: {
       speech_part: "string",
@@ -121,7 +121,9 @@ const defaultPromptConfig = {
     examples: "At least three examples per definition",
     highlighting: "Highlight the target word in examples using **word**, including inflected forms",
     empty_arrays: "Leave empty arrays for missing synonyms/antonyms",
-    phonetics: "Include both US and UK pronunciations when available"
+    phonetics: "Include both US and UK pronunciations when available",
+    en_def: "Make sure include an English definition for each meaning",
+    tran: "Make sure include a Vietnamese translation for each meaning"
   },
   // eslint-disable-next-line camelcase
   prompt_template: `Act as an English teacher preparing materials for IELTS students. Create a comprehensive dictionary in JSON format for the given list of words. For each word, include:
@@ -129,8 +131,8 @@ const defaultPromptConfig = {
 - An array of meanings, where each meaning corresponds to a different part of speech (e.g., noun, verb, adjective). Each meaning should include:
   - The part of speech
   - An array of definitions, each containing:
-    - A Vietnamese translation of the definition
-    - A English definition
+    - An English definition (\`en_def\`)
+    - A Vietnamese translation of the definition (\`tran\`)
     - At least two example sentences that use the word in context, with the word highlighted using **word** (or its inflected form, e.g., **goes**) for markdown rendering
     - An array of synonyms relevant to this definition (if any, otherwise an empty array)
     - An array of antonyms relevant to this definition (if any, otherwise an empty array)
