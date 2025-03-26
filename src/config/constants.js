@@ -96,7 +96,7 @@ const dataExample = `
 // Default prompt configuration
 const defaultPromptConfig = {
   task: 'dictionary_generation',
-  version: '1.3.3',
+  version: '1.3.4',
   schema: {
     Meaning: {
       speech_part: 'string',

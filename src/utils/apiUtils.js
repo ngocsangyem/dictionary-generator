@@ -94,32 +94,6 @@ async function processBatch(model, wordsBatch, config, tracker = null, workerDat
           // Check if the word entry exists with required top-level fields
           if (!parsedResult[word] || !parsedResult[word].meanings || !parsedResult[word].phonetics) {
             invalidWords.push(word);
-            continue;
-          }
-          
-          // Check that each meaning has definitions with required fields
-          const meanings = parsedResult[word].meanings;
-          let hasInvalidDefinition = false;
-          
-          for (const meaning of meanings) {
-            if (!meaning.defs || !Array.isArray(meaning.defs)) {
-              hasInvalidDefinition = true;
-              break;
-            }
-            
-            // Check each definition has required fields
-            for (const def of meaning.defs) {
-              if (!def.en_def || !def.tran || !def.examples || !Array.isArray(def.examples)) {
-                hasInvalidDefinition = true;
-                break;
-              }
-            }
-            
-            if (hasInvalidDefinition) break;
-          }
-          
-          if (hasInvalidDefinition) {
-            invalidWords.push(word);
           }
         }
                 

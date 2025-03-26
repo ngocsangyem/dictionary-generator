@@ -5,6 +5,12 @@ All notable changes to the Dictionary Generation Tool will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2025-04-01
+
+### Changed
+- Simplified API response validation to only check top-level structure
+- Removed detailed validation of definition fields to allow more flexible responses
+
 ## [1.3.3] - 2025-04-01
 
 ### Fixed
