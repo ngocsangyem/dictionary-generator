@@ -1,6 +1,9 @@
 const { defaultPromptConfig, DELAY_CONFIG } = require('../config/constants');
 const { logApiResponse } = require('./fileUtils');
 
+// Track request counts per session to optimize prompts
+const requestCounter = new Map();
+
 /**
  * Delay execution for the specified time
  */
@@ -27,8 +30,24 @@ function getPrompt(texts, config, isRetry = false) {
     return ''; // Return empty string to trigger empty response handling
   }
 
-  const template = isRetry ? promptConfig.retry_prompt_template : promptConfig.prompt_template;
-  return template.replace('{words}', validTexts.join(', '));
+  // Get request count for optimization
+  const sessionKey = validTexts.join(',').substring(0, 50); // Use portion of words as key
+  const requestCount = requestCounter.get(sessionKey) || 0;
+  
+  // For retry always use retry template
+  if (isRetry) {
+    return promptConfig.retry_prompt_template.replace('{words}', validTexts.join(', '));
+  }
+  
+  // For first 3 requests use full template, after that use abbreviated version
+  if (requestCount < 3) {
+    requestCounter.set(sessionKey, requestCount + 1);
+    return promptConfig.prompt_template.replace('{words}', validTexts.join(', '));
+  } else {
+    requestCounter.set(sessionKey, requestCount + 1);
+    console.log(`Using abbreviated prompt for request #${requestCount + 1}`);
+    return `Please define the following words using the same format and structure as before: ${validTexts.join(', ')}`;
+  }
 }
 
 /**
@@ -48,12 +67,16 @@ async function processBatch(model, wordsBatch, config, tracker = null, workerDat
     let resultText;
     let isRetry = false;
     let retryCount = 0;
+    let useFullPrompt = false;
     const MAX_JSON_RETRIES = 3;
 
     while (retryCount < MAX_JSON_RETRIES) {
       try {
         // Generate content with error handling
-        const response = await model.generateContent(getPrompt(wordsBatch, config, isRetry));
+        const prompt = getPrompt(wordsBatch, config, isRetry);
+        console.log(`Using ${isRetry ? 'retry' : (useFullPrompt ? 'full' : 'standard')} prompt, attempt: ${retryCount + 1}`);
+        
+        const response = await model.generateContent(prompt);
         if (!response || !response.response) {
           throw new Error('Empty response from API');
         }
@@ -111,9 +134,25 @@ async function processBatch(model, wordsBatch, config, tracker = null, workerDat
         }
                 
         retryCount++;
+        
+        // If we're using an abbreviated prompt and it failed, switch to full prompt
+        if (retryCount === 1 && !isRetry && !useFullPrompt) {
+          // First try to use full prompt before using retry prompt
+          console.log('Abbreviated prompt failed, falling back to full prompt...');
+          useFullPrompt = true;
+          
+          // Force full prompt on next request by temporarily resetting the counter
+          const sessionKey = wordsBatch.join(',').substring(0, 50);
+          requestCounter.set(sessionKey, 0);
+          
+          // Add delay before retry
+          await delay(DELAY_CONFIG.RETRY_DELAY / 2);
+          continue;
+        }
+        
         if (retryCount < MAX_JSON_RETRIES) {
           isRetry = true;
-          console.log(`Retrying with modified prompt after ${DELAY_CONFIG.RETRY_DELAY/1000}s delay...`);
+          console.log(`Retrying with retry prompt after ${DELAY_CONFIG.RETRY_DELAY/1000}s delay...`);
           await delay(DELAY_CONFIG.RETRY_DELAY);
           continue;
         }

@@ -5,6 +5,18 @@ All notable changes to the Dictionary Generation Tool will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2025-04-01
+
+### Added
+- Optimized prompt handling to reduce token usage after initial requests
+- Added tracking of request counts to determine when to use abbreviated prompts
+- Implemented smart fallback mechanism to use full prompt if abbreviated version fails
+
+### Changed
+- After first 3 successful requests, system now uses abbreviated prompts for token efficiency
+- Enhanced error handling to gracefully handle failures with abbreviated prompts
+- Improved logging to show which prompt type is being used
+
 ## [1.3.4] - 2025-04-01
 
 ### Changed

@@ -93,10 +93,37 @@ const dataExample = `
 }
 \`\`\``;
 
+const schemaMarkdown = `
+\`\`\`typescript
+interface Meaning {
+  speech_part: string;
+  defs: {
+    tran: string;
+    en_def: string;
+    examples: string[];
+    synonyms: string[];
+    antonyms: string[];
+  }[];
+}
+
+interface Phonetics {
+  type: string;
+  ipa: string;
+}
+
+interface Word {
+  [key: string]: {
+    word: string;
+    meanings: Meaning[];
+    phonetics: Phonetics[];
+  };
+}
+\`\`\``;
+
 // Default prompt configuration
 const defaultPromptConfig = {
   task: 'dictionary_generation',
-  version: '1.3.4',
+  version: '1.3.5',
   schema: {
     Meaning: {
       speech_part: 'string',
@@ -108,13 +135,14 @@ const defaultPromptConfig = {
         antonyms: 'string[]'
       }
     },
+    Phonetics: {
+      type: 'string',
+      ipa: 'string'
+    },
     Word: {
       word: 'string',
       meanings: 'Meaning[]',
-      phonetics: {
-        type: 'string',
-        ipa: 'string'
-      }
+      phonetics: 'Phonetics[]'
     }
   },
   instructions: {
@@ -141,6 +169,10 @@ const defaultPromptConfig = {
   - One entry for UK pronunciation with "type": "UK" and "ipa": [IPA string]
 
 The JSON structure should be an object where each key is a word from the list, and the value is an object containing "meanings" and "phonetics" as described.
+
+**Follow the schema and instructions strictly.**
+
+${schemaMarkdown}
 
 **Important:**
 - Always provide a detailed \`en_def\` that accurately reflects the meaning of the word in that context
