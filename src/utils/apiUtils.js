@@ -1,8 +1,28 @@
-const { defaultPromptConfig, DELAY_CONFIG } = require('../config/constants');
+const { defaultPromptConfig, DELAY_CONFIG, MODEL_CONFIG } = require('../config/constants');
 const { logApiResponse } = require('./fileUtils');
+const { createModelHandler } = require('./modelUtils');
 
 // Track request counts per session to optimize prompts
 const requestCounter = new Map();
+
+/**
+ * Initialize model handler with appropriate provider
+ * @param {Object} config - Configuration options
+ * @returns {Object} - Model handler instance
+ */
+function initModelHandler(config = {}) {
+  const modelType = config.modelType || MODEL_CONFIG.DEFAULT_MODEL;
+  const apiKey = config.apiKey || process.env[`${modelType.toUpperCase()}_API_KEY`];
+  
+  if (!apiKey) {
+    throw new Error(`API key for ${modelType} not found. Set ${modelType.toUpperCase()}_API_KEY environment variable.`);
+  }
+  
+  return createModelHandler(modelType, {
+    apiKey,
+    modelSettings: MODEL_CONFIG.MODEL_SETTINGS[modelType.toLowerCase()]
+  });
+}
 
 /**
  * Delay execution for the specified time
@@ -70,13 +90,18 @@ async function processBatch(model, wordsBatch, config, tracker = null, workerDat
     let useFullPrompt = false;
     const MAX_JSON_RETRIES = 3;
 
+    // If model is a string, create a model handler
+    const modelHandler = typeof model === 'string' 
+      ? initModelHandler({ modelType: model })
+      : model;
+
     while (retryCount < MAX_JSON_RETRIES) {
       try {
         // Generate content with error handling
         const prompt = getPrompt(wordsBatch, config, isRetry);
         console.log(`Using ${isRetry ? 'retry' : (useFullPrompt ? 'full' : 'standard')} prompt, attempt: ${retryCount + 1}`);
         
-        const response = await model.generateContent(prompt);
+        const response = await modelHandler.generateContent(prompt);
         if (!response || !response.response) {
           throw new Error('Empty response from API');
         }
@@ -185,5 +210,6 @@ async function processBatch(model, wordsBatch, config, tracker = null, workerDat
 module.exports = {
   getPrompt,
   processBatch,
-  delay
+  delay,
+  initModelHandler
 }; 

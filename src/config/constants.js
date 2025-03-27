@@ -20,6 +20,24 @@ const CONFIG_FILE = 'prompt_config.json';
 const NUM_WORKERS = os.cpus().length;
 const BATCH_SIZE = 28;
 
+// Model configuration
+const MODEL_CONFIG = {
+  DEFAULT_MODEL: 'gemini',
+  AVAILABLE_MODELS: ['gemini', 'deepseek'],
+  MODEL_SETTINGS: {
+    gemini: {
+      model: 'gemini-pro',
+      maxTokens: 2048,
+      temperature: 0.7
+    },
+    deepseek: {
+      model: 'deepseek-chat',
+      maxTokens: 2000,
+      temperature: 0.7
+    }
+  }
+};
+
 // Delay configuration for API calls
 const DELAY_CONFIG = {
   INITIAL_DELAY: 15000,        // 15 seconds between normal requests
@@ -123,7 +141,7 @@ interface Word {
 // Default prompt configuration
 const defaultPromptConfig = {
   task: 'dictionary_generation',
-  version: '1.3.5',
+  version: '1.4.0',
   schema: {
     Meaning: {
       speech_part: 'string',
@@ -202,5 +220,6 @@ module.exports = {
   NUM_WORKERS,
   BATCH_SIZE,
   DELAY_CONFIG,
+  MODEL_CONFIG,
   defaultPromptConfig
 }; 

@@ -1,7 +1,7 @@
 {
   "name": "dictionary-generator",
-  "version": "1.3.1",
-  "description": "Parallel dictionary generator using Gemini API",
+  "version": "1.4.0",
+  "description": "Parallel dictionary generator using Gemini and DeepSeek API",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -24,13 +24,16 @@
     "dictionary",
     "generative-ai",
     "gemini",
+    "deepseek",
     "parallel"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.1.3",
-    "dotenv": "^16.3.1"
+    "axios": "^1.6.7",
+    "dotenv": "^16.3.1",
+    "openai": "^4.20.0"
   },
   "devDependencies": {
     "eslint": "^8.42.0",

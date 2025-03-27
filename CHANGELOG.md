@@ -5,6 +5,20 @@ All notable changes to the Dictionary Generation Tool will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2025-04-01
+
+### Added
+- Added support for DeepSeek model as an alternative to Gemini
+- Created model handler system with base class and specific implementations
+- Added model configuration settings for different AI providers
+- Implemented response format normalization across different models
+
+### Changed
+- Refactored API interaction to use a modular model handler system
+- Updated configuration to support multiple AI models
+- Enhanced error handling for different API providers
+- Added axios dependency for DeepSeek API integration
+
 ## [1.3.5] - 2025-04-01
 
 ### Added
