@@ -12,12 +12,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Created model handler system with base class and specific implementations
 - Added model configuration settings for different AI providers
 - Implemented response format normalization across different models
+- Added comprehensive unit tests for multi-model support
+- Added integration tests for token optimization strategy
+- Created detailed documentation for model integration
+- Created comprehensive test suite for model handlers with coverage for all model types
+- Added robust tests for API utilities including prompt generation and retry mechanisms
+- Added npm scripts for running specific test suites: `test:model-utils` and `test:api-utils`
+- Added dedicated unit test scripts: `test:unit:model-utils`, `test:unit:api-utils`, `test:unit:all`
+- Added integration test script: `test:integration:all`
+- Improved test mocking for API utilities to ensure proper isolation between tests
+- Fixed state persistence issues in integration tests by implementing proper reset functions
 
 ### Changed
 - Refactored API interaction to use a modular model handler system
 - Updated configuration to support multiple AI models
 - Enhanced error handling for different API providers
 - Added axios dependency for DeepSeek API integration
+- Restructured tests to better validate model switching
+- Improved test coverage for model handlers and API utilities
+- Enhanced test reliability by implementing better mock isolation
+- Fixed test failures due to shared state between test runs
 
 ## [1.3.5] - 2025-04-01
 
