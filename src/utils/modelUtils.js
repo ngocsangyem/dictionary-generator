@@ -20,12 +20,22 @@ class BaseModelHandler {
 class GeminiHandler extends BaseModelHandler {
   constructor(config) {
     super(config);
-    this.model = new GoogleGenerativeAI(config.apiKey).getGenerativeModel({ model: 'gemini-pro' });
+    this.modelSettings = config.modelSettings || {};
+    const modelName = this.modelSettings.model || 'gemini-pro';
+    this.model = new GoogleGenerativeAI(config.apiKey).getGenerativeModel({ model: modelName });
   }
 
   async generateContent(prompt) {
     try {
-      const result = await this.model.generateContent(prompt);
+      const generationConfig = {};
+      if (this.modelSettings.maxTokens) {
+        generationConfig.maxOutputTokens = this.modelSettings.maxTokens;
+      }
+      if (typeof this.modelSettings.temperature === 'number') {
+        generationConfig.temperature = this.modelSettings.temperature;
+      }
+
+      const result = await this.model.generateContent(prompt, { generationConfig });
       return result;
     } catch (error) {
       console.error('Gemini API error:', error.message);
