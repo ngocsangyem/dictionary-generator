@@ -1,25 +1,26 @@
 // Mock external dependencies before imports
+
 jest.mock('@google/generative-ai', () => {
   const mockGenerateContent = jest.fn().mockResolvedValue({
     response: {
       text: () => '{"test": {"word": "test", "meanings": [{"speech_part": "noun"}], "phonetics": [{"type": "US"}]}}'
     }
   });
-  
-  const mockGenerateContentRateLimited = jest.fn().mockRejectedValue(new Error('API rate limit exceeded'));
-  
-  return {
-    GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
-      getGenerativeModel: jest.fn().mockReturnValue({
-        // Return a function that can be override in specific tests
-        generateContent: mockGenerateContent
-      })
-    })),
-    mockGenerateContent,
-    mockGenerateContentRateLimited
-  };
-}), { virtual: true };
 
+  const mockGenerateContentRateLimited = jest.fn().mockRejectedValue(new Error('API rate limit exceeded'));
+  const mockGetGenerativeModel = jest.fn().mockReturnValue({ generateContent: mockGenerateContent });
+  const mockGoogleGenerativeAI = jest.fn().mockImplementation(() => ({
+    getGenerativeModel: mockGetGenerativeModel
+  }));
+
+  return {
+    GoogleGenerativeAI: mockGoogleGenerativeAI,
+    mockGenerateContent,
+    mockGenerateContentRateLimited,
+    mockGetGenerativeModel,
+    mockGoogleGenerativeAI
+  };
+}, { virtual: true });
 jest.mock('openai', () => {
   const mockCreate = jest.fn().mockResolvedValue({
     choices: [
@@ -116,6 +117,28 @@ describe('GeminiHandler', () => {
 
     const handler = new GeminiHandler(config);
     await expect(handler.generateContent('test')).rejects.toThrow('API rate limit exceeded');
+  });
+
+  test('uses provided model settings when calling API', async () => {
+    const customConfig = {
+      apiKey: 'custom-key',
+      modelSettings: { model: 'gemini-flash', maxTokens: 500, temperature: 0.5 }
+    };
+    const handler = new GeminiHandler(customConfig);
+
+    await handler.generateContent('prompt');
+
+    const {
+      mockGoogleGenerativeAI,
+      mockGetGenerativeModel,
+      mockGenerateContent
+    } = require('@google/generative-ai');
+
+    expect(mockGoogleGenerativeAI).toHaveBeenCalledWith('custom-key');
+    expect(mockGetGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-flash' });
+    expect(mockGenerateContent).toHaveBeenCalledWith('prompt', {
+      generationConfig: { maxOutputTokens: 500, temperature: 0.5 }
+    });
   });
 });
 
